@@ -1,7 +1,5 @@
 # FluxMint 设计资产台
 
-![FluxMint 设计资产台封面](./public/readme-cover.svg)
-
 FluxMint 设计资产台是一款面向设计资源管理的桌面软件，基于 React、TypeScript、Vite 和 Tauri 构建，并提供手机端辅助界面。它把项目文件夹、资源预览、整理操作和历史记录放到同一个工作台里，适合日常管理大量设计素材、模型文件和项目文档。
 
 ## 下载与安装
@@ -26,20 +24,6 @@ Windows 安装包已发布到 GitHub Release。
 - 支持导入、重命名、移动、删除、恢复等常用整理动作
 - 同时提供桌面端和手机端入口
 - 适合设计资产、模型、素材、项目文件的日常整理
-
-## 截图
-
-### 概览页
-
-![概览页截图占位](./public/screenshots/dashboard.svg)
-
-### 项目工作区
-
-![项目工作区截图占位](./public/screenshots/workspace.svg)
-
-### 手机端
-
-![手机端截图占位](./public/screenshots/mobile.svg)
 
 ## 使用说明
 
@@ -88,7 +72,6 @@ npm run tauri:build
 - `src/` - 桌面端和手机端前端代码
 - `src-tauri/` - Tauri 壳层与 Rust 后端
 - `public/vendor/rhino3dm/` - 3D 预览所需运行资源
-- `public/screenshots/` - README 截图占位图
 - `remotion-intro/` - 片头/片尾视频工程源码
 
 ## 常见问题
