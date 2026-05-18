@@ -10,6 +10,17 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+remotion-intro/out
+FluxMint_*.md
+sj/
+workspace-redesign-check.png
+exe-icon-extracted*.png
+icon-crop-debug.png
+setup-icon-extracted.png
+src-tauri/icons/_check_*.png
+src-tauri/icons/extracted-from-fluxmint*.png
+src-tauri/icons/icon-crop-debug.png
+src-tauri/icons/icon-preview-fixed.png
 *.local
 
 # Editor directories and files

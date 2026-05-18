@@ -1,73 +1,53 @@
-# React + TypeScript + Vite
+# Asset Console
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+`Asset Console` is a desktop-first asset management app built with React, TypeScript, Vite, and Tauri. It also ships with a mobile-oriented companion UI.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Organizes projects and folder trees around local file sources
+- Shows recent files, duplicate groups, and operation history
+- Supports image, PDF, video, and 3D preview handling
+- Covers import, selection, move, delete, rename, and restore flows
+- Includes a mobile UI under `src/mobile`
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React 19
+- TypeScript
+- Vite
+- Tauri 2
+- Zustand
+- React Router
+- Three.js and Rhino3dm for 3D preview support
 
-## Expanding the ESLint configuration
+## Project Layout
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- `src/` - desktop and mobile UI
+- `src-tauri/` - Rust sidecar and Tauri shell
+- `public/vendor/rhino3dm/` - runtime assets required by 3D preview
+- `remotion-intro/` - optional intro/outro composition source
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Run Locally
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+To run the native shell:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run tauri:dev
 ```
+
+## Build
+
+```bash
+npm run build
+```
+
+## Notes
+
+- Generated build outputs are intentionally not tracked in Git.
+- This repository keeps source code and runtime assets only.
+- The `remotion-intro` folder keeps source files; rendered output is excluded from Git.
