@@ -1,53 +1,90 @@
-# Asset Console
+# FluxMint 设计资产台
 
-`Asset Console` is a desktop-first asset management app built with React, TypeScript, Vite, and Tauri. It also ships with a mobile-oriented companion UI.
+FluxMint 设计资产台是一个面向设计资源管理的桌面软件，基于 React、TypeScript、Vite 和 Tauri 构建，同时带有手机端辅助界面。它的目标不是“演示一个文件列表”，而是把真实项目中的文件夹、预览、分类、整理和操作记录放到同一套工作台里。
 
-## What it does
+## 下载与安装
 
-- Organizes projects and folder trees around local file sources
-- Shows recent files, duplicate groups, and operation history
-- Supports image, PDF, video, and 3D preview handling
-- Covers import, selection, move, delete, rename, and restore flows
-- Includes a mobile UI under `src/mobile`
+Windows 版本的安装包已随 GitHub Release 提供，文件名通常类似：
 
-## Tech Stack
+`FluxMint 设计资产台_0.1.0_x64-setup.exe`
 
-- React 19
-- TypeScript
-- Vite
-- Tauri 2
-- Zustand
-- React Router
-- Three.js and Rhino3dm for 3D preview support
+安装方式很直接：
 
-## Project Layout
+1. 打开 GitHub Releases 下载安装包
+2. 双击运行 `.exe`
+3. 按安装向导完成安装
+4. 首次启动后绑定你的项目文件夹
 
-- `src/` - desktop and mobile UI
-- `src-tauri/` - Rust sidecar and Tauri shell
-- `public/vendor/rhino3dm/` - runtime assets required by 3D preview
-- `remotion-intro/` - optional intro/outro composition source
+## 软件能做什么
 
-## Run Locally
+- 绑定本地项目文件夹并按项目管理资源
+- 浏览最近项目、最近文件、重复文件和操作记录
+- 预览图片、PDF、视频和 3D 资源
+- 支持导入、重命名、移动、删除、恢复等常见整理动作
+- 提供桌面端和手机端两套界面
+- 适合设计资产、模型、素材、项目文件的日常管理
+
+## 推荐使用流程
+
+1. 安装并启动软件
+2. 在首页新建或绑定一个项目
+3. 进入项目工作区，检查文件夹树和文件列表
+4. 使用预览区确认资源内容
+5. 通过筛选、排序、重复项和操作记录整理文件
+6. 如需移动或清理资源，先在工作区内完成确认，再执行操作
+
+## 界面说明
+
+- `概览`：查看最近项目、最近文件、重复资源和操作历史
+- `项目工作区`：浏览文件夹树、文件列表和资源预览
+- `规则`：管理整理和分类规则
+- `设置`：切换语言、调整导入行为和应用偏好
+- `手机端`：提供移动设备上的浏览和辅助操作入口
+
+## 项目结构
+
+- `src/` - 桌面端和手机端前端代码
+- `src-tauri/` - Tauri 壳层与 Rust 后端
+- `public/vendor/rhino3dm/` - 3D 预览所需运行资源
+- `remotion-intro/` - 片头/片尾视频工程源码
+
+## 适合谁使用
+
+- 需要整理大量项目素材的设计师
+- 需要按项目维度管理本地文件的团队
+- 需要图片、视频、PDF、3D 预览能力的资源工作流
+- 想把“整理文件”做成可重复、可追踪操作的用户
+
+## 从源码运行
 
 ```bash
 npm install
 npm run dev
 ```
 
-To run the native shell:
+运行桌面壳层：
 
 ```bash
 npm run tauri:dev
 ```
 
-## Build
+## 从源码打包
 
 ```bash
-npm run build
+npm run tauri:build
 ```
 
-## Notes
+## 开源说明
 
-- Generated build outputs are intentionally not tracked in Git.
-- This repository keeps source code and runtime assets only.
-- The `remotion-intro` folder keeps source files; rendered output is excluded from Git.
+这个仓库同时包含：
+
+- 软件源码
+- 发布用的安装包
+- 说明文档和必要的运行资源
+
+不再提交这些内容：
+
+- 构建产物
+- 调试截图
+- 中间稿和内部规划文档
+- 渲染出来但不需要继续维护的临时文件
