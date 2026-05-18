@@ -1,0 +1,15 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="720" rx="36" fill="#F8FAFC"/>
+  <rect x="52" y="52" width="1096" height="616" rx="28" fill="#FFFFFF" stroke="#DDE7EA"/>
+  <rect x="92" y="104" width="220" height="496" rx="24" fill="#F8FBFC" stroke="#E2E8F0"/>
+  <rect x="340" y="104" width="316" height="212" rx="24" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="680" y="104" width="376" height="212" rx="24" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="340" y="340" width="716" height="260" rx="24" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="600" y="360" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" fill="#0F172A">屏幕截图占位：概览页</text>
+  <text x="600" y="404" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="#475569">这里后续可替换为真实界面截图</text>
+  <circle cx="170" cy="172" r="40" fill="#D1FAE5"/>
+  <circle cx="170" cy="262" r="40" fill="#E0F2FE"/>
+  <circle cx="170" cy="352" r="40" fill="#FEF3C7"/>
+  <circle cx="170" cy="442" r="40" fill="#E2E8F0"/>
+  <circle cx="170" cy="532" r="40" fill="#FDE68A"/>
+</svg>
