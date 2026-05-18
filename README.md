@@ -6,7 +6,7 @@ FluxMint 设计资产台是一个面向设计资源管理的桌面软件，基�
 
 Windows 版本的安装包已随 GitHub Release 提供，文件名通常类似：
 
-`FluxMint 设计资产台_0.1.0_x64-setup.exe`
+`FluxMint-Design-Asset-Console-v0.1.0-x64-setup.exe`
 
 安装方式很直接：
 
