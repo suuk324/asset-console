@@ -1,0 +1,26 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(31, 111, 235, 0.08);
+  color: #1955a7;
+  font-size: 0.82rem;
+  border: 0;
+}
+
+.clickable {
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.clickable:hover {
+  transform: translateY(-1px);
+}
+
+.active {
+  background: #1f6feb;
+  color: #fffdf8;
+}

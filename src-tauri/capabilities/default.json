@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        "$DOCUMENT/Asset Console/**"
+      ]
+    },
+    {
+      "identifier": "opener:allow-reveal-item-in-dir",
+      "allow": [
+        "$DOCUMENT/Asset Console/**"
+      ]
+    }
+  ]
+}

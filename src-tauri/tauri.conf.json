@@ -1,0 +1,56 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "FluxMint 设计资产台",
+  "mainBinaryName": "FluxMint",
+  "version": "0.1.0",
+  "identifier": "com.fluxmint.assetconsole",
+  "build": {
+    "frontendDist": "../dist",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "center": true,
+        "title": "FluxMint 设计资产台",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1040,
+        "minHeight": 680,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "nsis",
+    "resources": [
+      "../dist/mobile.html",
+      "../dist/assets"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

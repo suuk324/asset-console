@@ -1,0 +1,39 @@
+.previewShell {
+  position: relative;
+  min-height: 396px;
+  border-radius: 22px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, var(--background-warm), transparent 30%),
+    linear-gradient(180deg, var(--surface-focus) 0%, var(--surface-panel) 100%);
+  box-shadow: inset 0 0 0 1px var(--preview-border);
+}
+
+.viewport {
+  width: 100%;
+  height: 396px;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-soft);
+  background: var(--surface-overlay);
+  backdrop-filter: blur(10px);
+}
+
+.hint {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: var(--surface-overlay);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  box-shadow: var(--shadow-nav);
+}

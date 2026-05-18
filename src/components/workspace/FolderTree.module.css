@@ -1,0 +1,224 @@
+.tree {
+  display: grid;
+  gap: 2px;
+}
+
+.node {
+  display: grid;
+  gap: 2px;
+  position: relative;
+}
+
+.children {
+  display: grid;
+  gap: 2px;
+  position: relative;
+}
+
+.children::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 9px;
+  left: calc(18px + (var(--tree-depth, 0) * 12px));
+  width: 1px;
+  background: var(--tree-guide);
+}
+
+.row,
+.rowActive,
+.rowDropTarget,
+.rowAncestor {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px 14px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 8px 0 calc(9px + (var(--tree-depth, 0) * 12px));
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    border-color 160ms ease;
+}
+
+.row[data-root='true'],
+.rowActive[data-root='true'],
+.rowDropTarget[data-root='true'],
+.rowAncestor[data-root='true'] {
+  min-height: 34px;
+  border-radius: 11px;
+  background: var(--tree-root-row);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.row[data-depth='1'],
+.rowActive[data-depth='1'],
+.rowDropTarget[data-depth='1'],
+.rowAncestor[data-depth='1'] {
+  min-height: 32px;
+  border-radius: 10px;
+  background: var(--tree-level-row);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.row:hover,
+.rowActive:hover,
+.rowDropTarget:hover,
+.rowAncestor:hover {
+  transform: translateY(-1px);
+}
+
+.row:hover {
+  background: var(--surface-interactive);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.rowAncestor {
+  background: var(--surface-interactive);
+  box-shadow: inset 2px 0 0 rgba(31, 111, 235, 0.34), inset 0 0 0 1px var(--border);
+}
+
+.rowActive {
+  background: var(--surface-selected);
+  box-shadow: inset 3px 0 0 var(--accent-primary), inset 0 0 0 1px var(--border-strong);
+}
+
+.rowDropTarget {
+  background: var(--surface-selected);
+  box-shadow: inset 0 0 0 1px var(--accent-primary), 0 0 0 1px var(--accent-primary-soft);
+}
+
+.row:not([data-root='true'])::before,
+.rowActive:not([data-root='true'])::before,
+.rowDropTarget:not([data-root='true'])::before,
+.rowAncestor:not([data-root='true'])::before {
+  content: '';
+  position: absolute;
+  left: calc(18px + ((var(--tree-depth, 0) - 1) * 12px));
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--tree-guide);
+}
+
+.expand,
+.label,
+.iconButton {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  margin: 0;
+  padding: 0;
+}
+
+.expand {
+  width: 14px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--ink-soft);
+  border-radius: 6px;
+}
+
+.expand:hover:not(:disabled) {
+  background: var(--surface-interactive);
+}
+
+.expand:disabled {
+  cursor: default;
+  opacity: 0.22;
+}
+
+.chevronRight,
+.chevronDown {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  display: block;
+}
+
+.chevronRight {
+  transform: rotate(-45deg);
+}
+
+.chevronDown {
+  transform: rotate(45deg);
+}
+
+.iconButton {
+  width: 14px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--ink-faint);
+}
+
+.folderIcon,
+.rootIcon {
+  position: relative;
+  display: block;
+  width: 11px;
+  height: 8px;
+  border-radius: 3px 3px 2px 2px;
+  background: currentColor;
+  opacity: 0.88;
+}
+
+.folderIcon::before,
+.rootIcon::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 1px;
+  width: 5px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: currentColor;
+}
+
+.rootIcon {
+  width: 12px;
+  height: 9px;
+  color: var(--accent-primary-strong);
+}
+
+.label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.label strong {
+  display: block;
+  min-width: 0;
+  color: var(--ink-strong);
+  font-size: var(--type-md);
+  line-height: var(--leading-snug);
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labelRoot {
+  font-size: var(--type-lg);
+  font-weight: var(--weight-strong);
+}
+
+.label span {
+  color: var(--ink-soft);
+  font-size: var(--type-xs);
+  line-height: var(--leading-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,54 @@
+[package]
+name = "asset_console"
+version = "0.1.0"
+description = "Local-first asset console for designers"
+authors = ["MOOM"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "asset_console_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.0", features = [] }
+
+[dependencies]
+axum = { version = "0.7", features = ["multipart"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+local-ip-address = "0.6"
+log = "0.4"
+mime_guess = "2.0"
+notify = "6.1.1"
+rand = "0.8"
+tauri = { version = "2.11.0", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+sha2 = "0.10"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
+urlencoding = "2.1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Memory",
+  "Win32_System_Ole",
+  "Win32_System_SystemServices",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+] }
+windows-core = "0.61"
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

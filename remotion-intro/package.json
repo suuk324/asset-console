@@ -1,0 +1,22 @@
+{
+  "name": "fluxmint-remotion-intro",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "studio": "remotion studio",
+    "still": "remotion still FluxMintIntro out/intro-frame.png --frame=30 --overwrite",
+    "render": "remotion render FluxMintIntro out/fluxmint-intro.mp4 --overwrite",
+    "render:outro": "remotion render FluxMintOutro out/fluxmint-outro.mp4 --overwrite"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "remotion": "^4.0.459"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.459",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "~6.0.2"
+  }
+}

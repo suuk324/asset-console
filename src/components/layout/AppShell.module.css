@@ -1,0 +1,323 @@
+.shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 7px;
+  height: 100vh;
+  min-height: 100vh;
+  color: var(--ink-strong);
+  position: relative;
+  overflow: hidden;
+  padding: 7px 10px 10px;
+}
+
+.backgroundGlow {
+  position: absolute;
+  inset: 98px auto auto -32px;
+  width: 128px;
+  height: 128px;
+  border-radius: 999px;
+  background: var(--background-warm);
+  filter: blur(64px);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.workspace {
+  --app-sidebar-width: var(--sidebar-expanded-width);
+  --app-inspector-expanded-width: var(--inspector-expanded-width);
+  --app-inspector-width: var(--app-inspector-expanded-width);
+  --app-inspector-handle-width: 8px;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    var(--app-sidebar-width)
+    minmax(0, 1fr)
+    var(--app-inspector-handle-width)
+    var(--app-inspector-width);
+  gap: 7px;
+  min-width: 0;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  transition: gap 140ms ease;
+}
+
+.sidebarCollapsed {
+  --app-sidebar-width: var(--sidebar-collapsed-width);
+}
+
+.inspectorCollapsed {
+  --app-inspector-handle-width: 0px;
+  --app-inspector-width: var(--inspector-collapsed-width);
+}
+
+.inspectorHidden {
+  --app-inspector-handle-width: 0px;
+  --app-inspector-width: 0px;
+}
+
+.canvas {
+  display: block;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.inspectorCollapsedRail {
+  display: grid;
+  align-self: stretch;
+  min-height: 0;
+}
+
+.inspectorCollapsedToggle {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-frame);
+  background: var(--surface-nav);
+  box-shadow: var(--shadow-shell);
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  cursor: pointer;
+}
+
+.inspectorCollapsedIcon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-elevated);
+  color: var(--ink-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.inspectorCollapsedLabel {
+  writing-mode: vertical-rl;
+  color: var(--ink-soft);
+  font-size: var(--type-xs);
+  line-height: var(--leading-tight);
+  letter-spacing: 0.08em;
+}
+
+.inspectorCollapsedMeta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--surface-selected);
+  color: var(--accent-primary-strong);
+  font-size: var(--type-2xs);
+  font-weight: var(--weight-semibold);
+}
+
+.guideOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(18, 20, 24, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.guideDialog {
+  width: min(880px, calc(100vw - 40px));
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--surface-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.guideHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.guideHeader strong {
+  display: block;
+  margin: 2px 0 4px;
+  font-size: var(--type-xl);
+  line-height: var(--leading-snug);
+}
+
+.guideHeader span {
+  display: block;
+  color: var(--ink-soft);
+  font-size: var(--type-sm);
+  line-height: var(--leading-normal);
+}
+
+.guideEyebrow {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: var(--type-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.guideCloseButton {
+  min-height: 30px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: var(--surface-elevated);
+  color: var(--ink-strong);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.guideGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.guideCard {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-panel);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.guideCard > strong {
+  color: var(--accent-primary-strong);
+  font-size: var(--type-xs);
+  line-height: var(--leading-tight);
+}
+
+.guideCard h3 {
+  margin: 0;
+  font-size: var(--type-md);
+  line-height: var(--leading-snug);
+}
+
+.guideCard p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--type-sm);
+  line-height: var(--leading-normal);
+}
+
+.inspectorResizeHandle {
+  width: 8px;
+  min-width: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+}
+
+.inspectorResizeHandle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent 0%, rgba(31, 111, 235, 0.12) 28%, rgba(31, 111, 235, 0.22) 52%, transparent 100%);
+  opacity: 0.75;
+}
+
+.inspectorResizeHandle:hover::before {
+  background: linear-gradient(180deg, transparent 0%, rgba(31, 111, 235, 0.18) 24%, rgba(31, 111, 235, 0.32) 52%, transparent 100%);
+}
+
+.dropOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: var(--overlay-backdrop);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.dropCard {
+  width: min(424px, calc(100vw - 28px));
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius-frame) + 1px);
+  padding: 16px 16px 14px;
+  background: var(--surface-focus);
+  box-shadow: var(--shadow-focus);
+  text-align: left;
+}
+
+.dropCard p {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.66rem;
+  color: var(--ink-faint);
+}
+
+.dropCard strong {
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.34;
+}
+
+.toast {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 32;
+  width: min(276px, calc(100vw - 28px));
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: var(--surface-focus);
+  box-shadow: var(--shadow-focus);
+  text-align: left;
+  cursor: pointer;
+}
+
+.toast strong {
+  display: block;
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.toast span {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 1480px) {
+  .shell {
+    padding-inline: 10px;
+  }
+
+  .workspace {
+    gap: 7px;
+  }
+}
+
+@media (max-width: 960px) {
+  .guideGrid {
+    grid-template-columns: 1fr;
+  }
+}

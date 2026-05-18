@@ -1,0 +1,208 @@
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.3fr);
+  gap: 16px;
+}
+
+.listPanel,
+.editorPanel {
+  border: 1px solid rgba(26, 27, 31, 0.08);
+  border-radius: 30px;
+  padding: 22px;
+  background: rgba(255, 250, 242, 0.84);
+  box-shadow: 0 18px 44px rgba(59, 50, 31, 0.08);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panelHeader h2 {
+  margin: 4px 0 0;
+  font-size: 1.18rem;
+}
+
+.addButton,
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 16px;
+  cursor: pointer;
+}
+
+.addButton,
+.primaryButton {
+  background: #1f6feb;
+  color: #fffdf8;
+}
+
+.secondaryButton {
+  background: rgba(31, 111, 235, 0.08);
+  color: #1955a7;
+}
+
+.dangerButton {
+  background: rgba(186, 55, 42, 0.12);
+  color: #9f291d;
+}
+
+.confidenceBadge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(31, 111, 235, 0.08);
+  color: #1955a7;
+  font-size: 0.82rem;
+}
+
+.ruleList {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.ruleCard,
+.ruleCardActive {
+  text-align: left;
+  border: 0;
+  border-radius: 22px;
+  padding: 16px;
+  cursor: pointer;
+  background: rgba(247, 240, 229, 0.86);
+}
+
+.ruleCardActive {
+  outline: 2px solid rgba(31, 111, 235, 0.28);
+  background: rgba(233, 241, 253, 0.86);
+}
+
+.ruleTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ruleCard strong,
+.ruleCardActive strong {
+  font-size: 0.98rem;
+}
+
+.ruleCard p,
+.ruleCardActive p {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.ruleEnabled,
+.ruleDisabled {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.ruleEnabled {
+  background: rgba(43, 138, 92, 0.12);
+  color: #256c49;
+}
+
+.ruleDisabled {
+  background: rgba(111, 103, 93, 0.14);
+  color: var(--ink-soft);
+}
+
+.tokenRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(26, 27, 31, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--ink-strong);
+  resize: vertical;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-soft);
+}
+
+.previewCard {
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(247, 240, 229, 0.86);
+}
+
+.previewCard strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.previewCard p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.previewTokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 1500px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
