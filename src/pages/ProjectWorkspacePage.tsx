@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
+import { openExternalTarget } from '../adapters/desktopBridge'
 import { AssetCardPreview } from '../components/common/AssetCardPreview'
 import { EmptyState } from '../components/common/EmptyState'
 import { ExternalAssetDragHandle } from '../components/common/ExternalAssetDragHandle'
@@ -8,7 +9,14 @@ import { FolderTree } from '../components/workspace/FolderTree'
 import { t } from '../i18n/translate'
 import { useDuplicateAssetGroups, useVisibleProjectAssets, useVisibleProjectFolders } from '../store/selectors'
 import { useAssetConsoleStore } from '../store/useAssetConsoleStore'
-import type { Asset, AssetKindFilter, FolderShortcut, ProjectFolder, RecycleBinEntry } from '../types/domain'
+import type {
+  Asset,
+  AssetKindFilter,
+  FolderShortcut,
+  ProjectFolder,
+  ProjectVersion,
+  RecycleBinEntry,
+} from '../types/domain'
 import pageStyles from './Page.module.css'
 
 const INTERNAL_ASSET_DRAG_TYPE = 'application/x-asset-console-assets'
@@ -53,6 +61,28 @@ function uniqueFolders(folders: Array<ProjectFolder | null>) {
   })
 }
 
+function projectVersionReasonLabel(language: string, version: Pick<ProjectVersion, 'reason'>) {
+  if (language !== 'zh-CN') {
+    switch (version.reason) {
+      case 'manual':
+        return 'Manual snapshot'
+      case 'before_restore':
+        return 'Before restore'
+      default:
+        return version.reason || 'Snapshot'
+    }
+  }
+
+  switch (version.reason) {
+    case 'manual':
+      return '手动快照'
+    case 'before_restore':
+      return '恢复前快照'
+    default:
+      return version.reason || '项目快照'
+  }
+}
+
 type WorkspaceContextMenuState =
   | {
       kind: 'asset'
@@ -73,6 +103,7 @@ export function ProjectWorkspacePage() {
   const [sortMode, setSortMode] = useState<AssetSortMode>('modified')
   const [duplicatesOnly, setDuplicatesOnly] = useState(false)
   const [quickMoveTargetId, setQuickMoveTargetId] = useState('')
+  const [versionNoteDraft, setVersionNoteDraft] = useState('')
   const [operationsCollapsed, setOperationsCollapsed] = useState(true)
   const [gridDensity, setGridDensity] = useState<'compact' | 'standard' | 'large'>('standard')
   const navigate = useNavigate()
@@ -90,6 +121,9 @@ export function ProjectWorkspacePage() {
     workspaceWatchEnabled,
     actions,
     recycleEntries,
+    projectVersions,
+    projectVersionBackupPaths,
+    projectVersionLoadingId,
     setSelectedProject,
     unbindProject,
     setSelectedFolder,
@@ -110,6 +144,9 @@ export function ProjectWorkspacePage() {
     renameAsset,
     undoLastAction,
     undoLastImport,
+    loadProjectVersions,
+    createProjectVersion,
+    restoreProjectVersion,
     restoreRecycleEntries,
     emptyRecycleBin,
   } = useAssetConsoleStore(
@@ -126,6 +163,9 @@ export function ProjectWorkspacePage() {
       workspaceWatchEnabled: state.workspaceWatchEnabled,
       actions: state.actions,
       recycleEntries: state.recycleEntries,
+      projectVersions: state.projectVersions,
+      projectVersionBackupPaths: state.projectVersionBackupPaths,
+      projectVersionLoadingId: state.projectVersionLoadingId,
       setSelectedProject: state.setSelectedProject,
       unbindProject: state.unbindProject,
       setSelectedFolder: state.setSelectedFolder,
@@ -146,6 +186,9 @@ export function ProjectWorkspacePage() {
       renameAsset: state.renameAsset,
       undoLastAction: state.undoLastAction,
       undoLastImport: state.undoLastImport,
+      loadProjectVersions: state.loadProjectVersions,
+      createProjectVersion: state.createProjectVersion,
+      restoreProjectVersion: state.restoreProjectVersion,
       restoreRecycleEntries: state.restoreRecycleEntries,
       emptyRecycleBin: state.emptyRecycleBin,
     })),
@@ -156,6 +199,12 @@ export function ProjectWorkspacePage() {
       setSelectedProject(projectId)
     }
   }, [projectId, setSelectedProject])
+
+  useEffect(() => {
+    if (projectId) {
+      void loadProjectVersions(projectId)
+    }
+  }, [loadProjectVersions, projectId])
 
   const project = useMemo(
     () => projects.find((entry) => entry.id === projectId) ?? null,
@@ -266,6 +315,9 @@ export function ProjectWorkspacePage() {
     () => recycleEntries.filter((entry) => entry.projectId === projectScopeId),
     [projectScopeId, recycleEntries],
   )
+  const versions = project ? projectVersions[project.id] ?? [] : []
+  const versionBackupPath = project ? projectVersionBackupPaths[project.id] ?? '' : ''
+  const versionsLoading = Boolean(project && projectVersionLoadingId === project.id)
 
   const isFavoriteFolder = (folder: ProjectFolder | null) =>
     Boolean(
@@ -489,6 +541,9 @@ export function ProjectWorkspacePage() {
         </span>
         <span className={pageStyles.statusBadgeMuted}>
           {t(language, 'recycleBin')} {projectRecycleEntries.length}
+        </span>
+        <span className={pageStyles.statusBadgeMuted}>
+          {language === 'zh-CN' ? '项目版本' : 'Project versions'} {versions.length}
         </span>
         <span className={pageStyles.statusBadgeMuted}>
           {t(language, 'autoRefreshStatus')}: {workspaceWatchEnabled ? t(language, 'autoRefreshOn') : t(language, 'autoRefreshOff')}
@@ -986,6 +1041,111 @@ export function ProjectWorkspacePage() {
         </section>
 
         <div className={pageStyles.summaryStack}>
+          <section className={`${pageStyles.panel} ${pageStyles.panelMuted} ${pageStyles.summaryPanel}`}>
+            <div className={pageStyles.panelHeader}>
+              <div>
+                <h2>{language === 'zh-CN' ? '项目版本管理' : 'Project versions'}</h2>
+                <span className={pageStyles.mutedText}>
+                  {language === 'zh-CN'
+                    ? '保存整个项目文件夹的快照，恢复时会回滚项目内文件和目录。版本会进入项目旁边的独立备份文件夹。'
+                    : 'Snapshot the whole project folder and restore its files and folders together. Versions are stored in a separate backup folder next to the project.'}
+                </span>
+                {versionBackupPath ? (
+                  <span className={pageStyles.versionPath} title={versionBackupPath}>
+                    {language === 'zh-CN' ? '备份文件夹：' : 'Backup folder: '}
+                    {versionBackupPath}
+                  </span>
+                ) : null}
+              </div>
+              {versionBackupPath ? (
+                <button
+                  type="button"
+                  className={pageStyles.secondaryButton}
+                  disabled={versions.length === 0}
+                  onClick={() => void openExternalTarget(versionBackupPath)}
+                >
+                  {language === 'zh-CN' ? '打开备份文件夹' : 'Open backup folder'}
+                </button>
+              ) : null}
+            </div>
+
+            <div className={pageStyles.versionCreateRow}>
+              <input
+                value={versionNoteDraft}
+                onChange={(event) => setVersionNoteDraft(event.target.value)}
+                placeholder={language === 'zh-CN' ? '项目版本备注，可留空' : 'Project version note, optional'}
+              />
+              <button
+                type="button"
+                className={pageStyles.primaryButton}
+                disabled={versionsLoading}
+                onClick={() => {
+                  if (!project) {
+                    return
+                  }
+                  void createProjectVersion(project.id, versionNoteDraft)
+                  setVersionNoteDraft('')
+                }}
+              >
+                {versionsLoading
+                  ? language === 'zh-CN'
+                    ? '处理中'
+                    : 'Working'
+                  : language === 'zh-CN'
+                    ? '保存项目版本'
+                    : 'Save snapshot'}
+              </button>
+            </div>
+
+            {versions.length === 0 ? (
+              <p className={pageStyles.mutedText}>
+                {versionsLoading
+                  ? language === 'zh-CN'
+                    ? '正在读取项目版本...'
+                    : 'Loading project versions...'
+                  : language === 'zh-CN'
+                    ? '还没有项目版本。保存后可以把整个项目恢复到这个时间点。'
+                    : 'No project versions yet. Save one to restore the whole project to that point.'}
+              </p>
+            ) : (
+              <div className={pageStyles.versionList}>
+                {versions.map((version) => (
+                  <article key={version.id} className={pageStyles.versionItem}>
+                    <div className={pageStyles.versionCopy}>
+                      <strong>{version.createdAt}</strong>
+                      <span>
+                        {projectVersionReasonLabel(language, version)} / {version.fileCount}{' '}
+                        {language === 'zh-CN' ? '个文件' : 'files'} / {version.totalSizeLabel}
+                      </span>
+                      {version.note ? <p>{version.note}</p> : null}
+                      <p title={version.snapshotPath}>{version.snapshotPath}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className={pageStyles.secondaryButton}
+                      disabled={versionsLoading}
+                      onClick={() => {
+                        if (!project) {
+                          return
+                        }
+                        const confirmed = window.confirm(
+                          language === 'zh-CN'
+                            ? '恢复这个项目版本？当前项目会先自动保存为一个恢复前快照，然后项目文件夹会回滚到所选版本。'
+                            : 'Restore this project version? The current project will be saved first, then the project folder will be rolled back.',
+                        )
+                        if (confirmed) {
+                          void restoreProjectVersion(project.id, version.id)
+                        }
+                      }}
+                    >
+                      {language === 'zh-CN' ? '恢复' : 'Restore'}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className={`${pageStyles.panel} ${pageStyles.panelWarning} ${pageStyles.summaryPanel}`}>
             <div className={pageStyles.panelHeader}>
               <div>

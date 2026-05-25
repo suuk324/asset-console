@@ -4,14 +4,18 @@ import {
   chooseFilesForImport,
   chooseLanPanelWorkspace,
   commitImport,
+  createFileVersion as createFileVersionRequest,
   createFolder,
   createProject as createProjectRequest,
+  createProjectVersion as createProjectVersionRequest,
   deleteAssets as deleteAssetsRequest,
   deleteFolder,
   deleteRule,
   emptyRecycleBin as emptyRecycleBinRequest,
   isDesktopRuntime,
   loadLanPanelStatus,
+  loadFileVersions,
+  loadProjectVersions,
   loadRecycleBin,
   loadOperationHistory,
   loadWorkspace,
@@ -23,6 +27,8 @@ import {
   rescanProject,
   revealManagedPath,
   restoreRecycleEntries as restoreRecycleEntriesRequest,
+  restoreFileVersion as restoreFileVersionRequest,
+  restoreProjectVersion as restoreProjectVersionRequest,
   saveRule as saveRuleRequest,
   saveSettings as saveSettingsRequest,
   setLanPanelWorkspace as setLanPanelWorkspaceRequest,
@@ -33,8 +39,10 @@ import {
   subscribeToWorkspaceChanges,
   toDomainAsset,
   toDomainAction,
+  toDomainFileVersion,
   toDomainFolder,
   toDomainLanPanelStatus,
+  toDomainProjectVersion,
   toDomainProject,
   toDomainRecycleEntry,
   toDomainRule,
@@ -51,6 +59,7 @@ import type {
   Asset,
   AssetKindFilter,
   ClassificationRule,
+  FileVersion,
   FolderShortcut,
   ImportMode,
   ImportPreviewItem,
@@ -58,6 +67,7 @@ import type {
   Project,
   ProjectCreateInput,
   ProjectFolder,
+  ProjectVersion,
   RecycleBinEntry,
   SupportedLanguage,
   UserAction,
@@ -93,6 +103,11 @@ interface AssetConsoleState {
   importPlan: ImportPreviewItem[]
   importPanelOpen: boolean
   recycleEntries: RecycleBinEntry[]
+  assetVersions: Record<string, FileVersion[]>
+  versionLoadingAssetId: string | null
+  projectVersions: Record<string, ProjectVersion[]>
+  projectVersionBackupPaths: Record<string, string>
+  projectVersionLoadingId: string | null
   toast: ToastState | null
   dragSubscriptionReady: boolean
   workspaceWatchSubscriptionReady: boolean
@@ -127,6 +142,12 @@ interface AssetConsoleState {
   renameAsset: (assetId: string, nextName: string) => Promise<void>
   moveSelectedAssets: (targetFolderId: string, assetIds?: string[]) => Promise<void>
   deleteSelectedAssets: () => Promise<void>
+  loadAssetVersions: (assetId: string) => Promise<void>
+  createAssetVersion: (assetId: string, note?: string) => Promise<void>
+  restoreAssetVersion: (assetId: string, versionId: string) => Promise<void>
+  loadProjectVersions: (projectId: string) => Promise<void>
+  createProjectVersion: (projectId: string, note?: string) => Promise<void>
+  restoreProjectVersion: (projectId: string, versionId: string) => Promise<void>
   restoreRecycleEntries: (entryIds: string[]) => Promise<void>
   emptyRecycleBin: (entryIds?: string[]) => Promise<void>
   openAsset: (assetId: string) => Promise<void>
@@ -248,6 +269,10 @@ const persistedActionTypes: UserAction['type'][] = [
   'move_asset',
   'delete_assets',
   'undo_action',
+  'create_version',
+  'restore_version',
+  'create_project_version',
+  'restore_project_version',
 ]
 
 function mergeVisibleActions(currentActions: UserAction[], persistedActions: UserAction[]) {
@@ -410,6 +435,11 @@ export const useAssetConsoleStore = create<AssetConsoleState>((set, get) => ({
   importPlan: [],
   importPanelOpen: false,
   recycleEntries: [],
+  assetVersions: {},
+  versionLoadingAssetId: null,
+  projectVersions: {},
+  projectVersionBackupPaths: {},
+  projectVersionLoadingId: null,
   toast: null,
   dragSubscriptionReady: false,
   workspaceWatchSubscriptionReady: false,
@@ -1134,6 +1164,225 @@ export const useAssetConsoleStore = create<AssetConsoleState>((set, get) => ({
         toast: {
           title: 'Delete failed',
           message: readErrorMessage(error, 'Unable to delete the selected files.'),
+        },
+      })
+    }
+  },
+  async loadAssetVersions(assetId) {
+    if (!assetId) {
+      return
+    }
+
+    set({ versionLoadingAssetId: assetId })
+    try {
+      const response = await loadFileVersions(assetId)
+      set((state) => ({
+        versionLoadingAssetId: state.versionLoadingAssetId === assetId ? null : state.versionLoadingAssetId,
+        assetVersions: {
+          ...state.assetVersions,
+          [assetId]: response.versions.map(toDomainFileVersion),
+        },
+      }))
+    } catch (error) {
+      set({
+        versionLoadingAssetId: null,
+        toast: {
+          title: 'Version load failed',
+          message: readErrorMessage(error, 'Unable to load file versions.'),
+        },
+      })
+    }
+  },
+  async createAssetVersion(assetId, note) {
+    const asset = get().assets.find((entry) => entry.id === assetId)
+    if (!asset) {
+      return
+    }
+
+    set({ versionLoadingAssetId: assetId })
+    try {
+      const response = await createFileVersionRequest(assetId, note ?? '')
+      const history = await loadOperationHistory()
+      const language = currentLanguage(get().settings)
+      set((state) => ({
+        versionLoadingAssetId: null,
+        assetVersions: {
+          ...state.assetVersions,
+          [assetId]: response.versions.map(toDomainFileVersion),
+        },
+        actions: mergeVisibleActions(state.actions, history.actions.map(toDomainAction)),
+        toast: {
+          title: language === 'zh-CN' ? '版本已保存' : 'Version saved',
+          message: asset.name,
+        },
+      }))
+    } catch (error) {
+      set({
+        versionLoadingAssetId: null,
+        toast: {
+          title: 'Version save failed',
+          message: readErrorMessage(error, 'Unable to save this file version.'),
+        },
+      })
+    }
+  },
+  async restoreAssetVersion(assetId, versionId) {
+    const asset = get().assets.find((entry) => entry.id === assetId)
+    if (!asset) {
+      return
+    }
+
+    set({ versionLoadingAssetId: assetId })
+    try {
+      const response = await restoreFileVersionRequest(assetId, versionId)
+      const updatedAsset = toDomainAsset(response.asset)
+      suppressNextWorkspaceRefresh([updatedAsset.projectId])
+      const history = await loadOperationHistory()
+      const language = currentLanguage(get().settings)
+      set((state) => ({
+        versionLoadingAssetId: null,
+        assets: replaceAssets(state.assets.map((entry) => (entry.id === updatedAsset.id ? updatedAsset : entry))),
+        selectedAssetId: updatedAsset.id,
+        selectedAssetIds: [updatedAsset.id],
+        assetVersions: {
+          ...state.assetVersions,
+          [updatedAsset.id]: response.versions.map(toDomainFileVersion),
+        },
+        actions: mergeVisibleActions(state.actions, history.actions.map(toDomainAction)),
+        toast: {
+          title: language === 'zh-CN' ? '版本已恢复' : 'Version restored',
+          message: updatedAsset.name,
+        },
+      }))
+    } catch (error) {
+      set({
+        versionLoadingAssetId: null,
+        toast: {
+          title: 'Version restore failed',
+          message: readErrorMessage(error, 'Unable to restore this file version.'),
+        },
+      })
+    }
+  },
+  async loadProjectVersions(projectId) {
+    if (!projectId) {
+      return
+    }
+
+    set({ projectVersionLoadingId: projectId })
+    try {
+      const response = await loadProjectVersions(projectId)
+      set((state) => ({
+        projectVersionLoadingId:
+          state.projectVersionLoadingId === projectId ? null : state.projectVersionLoadingId,
+        projectVersions: {
+          ...state.projectVersions,
+          [projectId]: response.versions.map(toDomainProjectVersion),
+        },
+        projectVersionBackupPaths: {
+          ...state.projectVersionBackupPaths,
+          [projectId]: response.backupPath,
+        },
+      }))
+    } catch (error) {
+      set({
+        projectVersionLoadingId: null,
+        toast: {
+          title: 'Project version load failed',
+          message: readErrorMessage(error, 'Unable to load project versions.'),
+        },
+      })
+    }
+  },
+  async createProjectVersion(projectId, note) {
+    const project = get().projects.find((entry) => entry.id === projectId)
+    if (!project) {
+      return
+    }
+
+    set({ projectVersionLoadingId: projectId })
+    try {
+      const response = await createProjectVersionRequest(projectId, note ?? '')
+      const history = await loadOperationHistory()
+      const language = currentLanguage(get().settings)
+      set((state) => ({
+        projectVersionLoadingId: null,
+        projectVersions: {
+          ...state.projectVersions,
+          [projectId]: response.versions.map(toDomainProjectVersion),
+        },
+        projectVersionBackupPaths: {
+          ...state.projectVersionBackupPaths,
+          [projectId]: response.backupPath,
+        },
+        actions: mergeVisibleActions(state.actions, history.actions.map(toDomainAction)),
+        toast: {
+          title: language === 'zh-CN' ? '项目版本已保存' : 'Project version saved',
+          message: project.name,
+        },
+      }))
+    } catch (error) {
+      set({
+        projectVersionLoadingId: null,
+        toast: {
+          title: 'Project version save failed',
+          message: readErrorMessage(error, 'Unable to save this project version.'),
+        },
+      })
+    }
+  },
+  async restoreProjectVersion(projectId, versionId) {
+    const project = get().projects.find((entry) => entry.id === projectId)
+    if (!project) {
+      return
+    }
+
+    set({ projectVersionLoadingId: projectId })
+    try {
+      const response = await restoreProjectVersionRequest(projectId, versionId)
+      const restoredProject = toDomainProject(response.project)
+      const folders = response.folders.map(toDomainFolder)
+      const assets = response.assets.map(toDomainAsset)
+      suppressNextWorkspaceRefresh([projectId])
+      const history = await loadOperationHistory()
+      const language = currentLanguage(get().settings)
+      set((state) => {
+        const merged = mergeProjectSnapshot(state, projectId, folders, assets)
+        const nextSelectedFolderId = folders.some((folder) => folder.id === state.selectedFolderId)
+          ? state.selectedFolderId
+          : folders.find((folder) => !folder.parentId)?.id ?? null
+        const nextSelectedAssetId = assets.some((asset) => asset.id === state.selectedAssetId)
+          ? state.selectedAssetId
+          : null
+
+        return {
+          ...merged,
+          projects: state.projects.map((entry) => (entry.id === restoredProject.id ? restoredProject : entry)),
+          selectedFolderId: nextSelectedFolderId,
+          selectedAssetId: nextSelectedAssetId,
+          selectedAssetIds: nextSelectedAssetId ? [nextSelectedAssetId] : [],
+          projectVersionLoadingId: null,
+          projectVersions: {
+            ...state.projectVersions,
+            [projectId]: response.versions.map(toDomainProjectVersion),
+          },
+          projectVersionBackupPaths: {
+            ...state.projectVersionBackupPaths,
+            [projectId]: response.backupPath,
+          },
+          actions: mergeVisibleActions(state.actions, history.actions.map(toDomainAction)),
+          toast: {
+            title: language === 'zh-CN' ? '项目版本已恢复' : 'Project version restored',
+            message: restoredProject.name,
+          },
+        }
+      })
+    } catch (error) {
+      set({
+        projectVersionLoadingId: null,
+        toast: {
+          title: 'Project version restore failed',
+          message: readErrorMessage(error, 'Unable to restore this project version.'),
         },
       })
     }

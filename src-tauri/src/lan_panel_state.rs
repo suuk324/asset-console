@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::PathBuf, sync::Mutex};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use chrono::{DateTime, Duration, Local};
 use serde::Serialize;
@@ -93,7 +97,7 @@ impl LanPanelState {
 
 pub fn snapshot_from_shared(shared: &LanPanelSharedState) -> LanPanelStatusResponse {
     let workspace_selected = shared.workspace_root.is_some();
-    let workspace_name = shared.workspace_root.as_ref().map(workspace_display_name);
+    let workspace_name = shared.workspace_root.as_deref().map(workspace_display_name);
     let workspace_path = shared
         .workspace_root
         .as_ref()
@@ -121,7 +125,7 @@ pub fn snapshot_from_shared(shared: &LanPanelSharedState) -> LanPanelStatusRespo
     }
 }
 
-pub fn workspace_display_name(root: &PathBuf) -> String {
+pub fn workspace_display_name(root: &Path) -> String {
     root.file_name()
         .map(|value| value.to_string_lossy().into_owned())
         .filter(|value| !value.trim().is_empty())

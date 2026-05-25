@@ -858,7 +858,7 @@ fn track_device(
 
     guard
         .devices
-        .sort_by(|left, right| right.last_seen_at.cmp(&left.last_seen_at));
+        .sort_by_key(|device| std::cmp::Reverse(device.last_seen_at));
     guard.devices.truncate(DEVICE_LIMIT);
 
     Ok(())
@@ -907,7 +907,7 @@ mod tests {
         collections::HashMap,
         env, fs,
         net::{Ipv4Addr, SocketAddr},
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::Arc,
     };
 
@@ -940,7 +940,7 @@ mod tests {
         ))
     }
 
-    fn build_test_state(workspace_root: &PathBuf, assets_root: &PathBuf) -> Arc<LanPanelState> {
+    fn build_test_state(workspace_root: &Path, assets_root: &Path) -> Arc<LanPanelState> {
         fs::create_dir_all(assets_root.join("assets")).unwrap();
         fs::write(
             assets_root.join("mobile.html"),

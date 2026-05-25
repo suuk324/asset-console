@@ -60,9 +60,14 @@ const DEFAULT_LANGUAGE: &str = "zh-CN";
 const DEFAULT_THEME: &str = "system";
 const DEFAULT_IMPORT_MODE: &str = "manual";
 const RECYCLE_BIN_FOLDER_NAME: &str = "recycle-bin";
+const VERSION_STORE_FOLDER_NAME: &str = "file-versions";
+const PROJECT_VERSION_STORE_FOLDER_NAME: &str = "project-versions";
+const PROJECT_VERSION_BACKUP_FOLDER_SUFFIX: &str = "FluxMint_Project_Versions";
 const PREVIEW_CACHE_FOLDER_NAME: &str = "native-previews";
 const MAX_RECENT_TARGET_FOLDERS: usize = 8;
 const MAX_OPERATION_HISTORY: usize = 120;
+const MAX_FILE_VERSIONS_PER_ASSET: usize = 20;
+const MAX_PROJECT_VERSIONS_PER_PROJECT: usize = 20;
 const TEXT_REFERENCE_EXTENSIONS: &[&str] = &[
     "txt", "md", "markdown", "json", "yml", "yaml", "csv", "html", "htm", "css", "scss", "js",
     "jsx", "ts", "tsx", "svg", "xml",
@@ -202,6 +207,40 @@ pub struct RecycleEntryRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileVersionRecord {
+    pub id: String,
+    pub asset_id: String,
+    pub project_id: String,
+    pub name: String,
+    pub relative_path: String,
+    pub original_path: String,
+    pub snapshot_path: String,
+    pub created_at: String,
+    pub reason: String,
+    pub note: String,
+    pub file_size_bytes: u64,
+    pub file_size_label: String,
+    pub fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectVersionRecord {
+    pub id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub root_path: String,
+    pub snapshot_path: String,
+    pub created_at: String,
+    pub reason: String,
+    pub note: String,
+    pub file_count: usize,
+    pub total_size_bytes: u64,
+    pub total_size_label: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceIndex {
@@ -212,20 +251,8 @@ pub struct WorkspaceIndex {
     pub settings: SettingsRecord,
     pub import_history: Vec<ImportBatchRecord>,
     pub recycle_entries: Vec<RecycleEntryRecord>,
-}
-
-impl Default for WorkspaceIndex {
-    fn default() -> Self {
-        Self {
-            projects: Vec::new(),
-            folders: Vec::new(),
-            assets: Vec::new(),
-            rules: Vec::new(),
-            settings: SettingsRecord::default(),
-            import_history: Vec::new(),
-            recycle_entries: Vec::new(),
-        }
-    }
+    pub version_entries: Vec<FileVersionRecord>,
+    pub project_version_entries: Vec<ProjectVersionRecord>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -356,6 +383,36 @@ pub struct RecycleBinResponse {
     pub entries: Vec<RecycleEntryRecord>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileVersionResponse {
+    pub versions: Vec<FileVersionRecord>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreFileVersionResponse {
+    pub asset: AssetRecord,
+    pub versions: Vec<FileVersionRecord>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectVersionResponse {
+    pub backup_path: String,
+    pub versions: Vec<ProjectVersionRecord>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreProjectVersionResponse {
+    pub project: ProjectRecord,
+    pub folders: Vec<FolderRecord>,
+    pub assets: Vec<AssetRecord>,
+    pub backup_path: String,
+    pub versions: Vec<ProjectVersionRecord>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OperationHistoryEntry {
@@ -435,6 +492,34 @@ pub struct DeleteAssetsRequest {
 #[serde(rename_all = "camelCase")]
 pub struct RecycleBinMutationRequest {
     pub entry_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileVersionRequest {
+    pub asset_id: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreFileVersionRequest {
+    pub asset_id: String,
+    pub version_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectVersionRequest {
+    pub project_id: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreProjectVersionRequest {
+    pub project_id: String,
+    pub version_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -590,6 +675,252 @@ pub fn load_recycle_bin(app: AppHandle) -> Result<RecycleBinResponse, String> {
     }
     Ok(RecycleBinResponse {
         entries: index.recycle_entries,
+    })
+}
+
+#[tauri::command]
+pub fn load_file_versions(
+    app: AppHandle,
+    request: FileVersionRequest,
+) -> Result<FileVersionResponse, String> {
+    let mut index = load_workspace_index(&app)?;
+    sanitize_workspace_index(&mut index);
+    prune_file_versions(&mut index);
+    save_workspace_index(&app, &index)?;
+
+    Ok(FileVersionResponse {
+        versions: file_versions_for_asset(&index, &request.asset_id),
+    })
+}
+
+#[tauri::command]
+pub fn create_file_version(
+    app: AppHandle,
+    request: FileVersionRequest,
+) -> Result<FileVersionResponse, String> {
+    let mut index = load_workspace_index(&app)?;
+    sanitize_workspace_index(&mut index);
+    let asset = find_asset(&index.assets, &request.asset_id)
+        .cloned()
+        .ok_or_else(|| "Asset not found.".to_string())?;
+
+    let note = request.note.unwrap_or_default();
+    let version = create_file_version_for_asset(&app, &mut index, &asset, "manual", note)?;
+    append_operation_history_entry(
+        &app,
+        operation_history_entry(
+            "create_version",
+            localized_named_action_detail(
+                &index.settings.language,
+                "保存版本",
+                "Saved version",
+                &version.name,
+            ),
+            None,
+        ),
+    )?;
+    save_workspace_index(&app, &index)?;
+
+    Ok(FileVersionResponse {
+        versions: file_versions_for_asset(&index, &asset.id),
+    })
+}
+
+#[tauri::command]
+pub fn restore_file_version(
+    app: AppHandle,
+    request: RestoreFileVersionRequest,
+) -> Result<RestoreFileVersionResponse, String> {
+    let mut index = load_workspace_index(&app)?;
+    sanitize_workspace_index(&mut index);
+    let asset = find_asset(&index.assets, &request.asset_id)
+        .cloned()
+        .ok_or_else(|| "Asset not found.".to_string())?;
+    let version = index
+        .version_entries
+        .iter()
+        .find(|entry| entry.asset_id == request.asset_id && entry.id == request.version_id)
+        .cloned()
+        .ok_or_else(|| "File version not found.".to_string())?;
+
+    let snapshot_path = PathBuf::from(&version.snapshot_path);
+    if !snapshot_path.is_file() {
+        index
+            .version_entries
+            .retain(|entry| entry.snapshot_path != version.snapshot_path);
+        save_workspace_index(&app, &index)?;
+        return Err("The selected file version snapshot no longer exists.".into());
+    }
+
+    let current_path = PathBuf::from(&asset.managed_path);
+    if !current_path.is_file() {
+        return Err("Asset file no longer exists on disk.".into());
+    }
+
+    create_file_version_for_asset(&app, &mut index, &asset, "before_restore", String::new())?;
+    copy_file_checked(&snapshot_path, &current_path)?;
+
+    let project_id = asset.project_id.clone();
+    let (_, _, assets) = rescan_project_records(&mut index, &project_id)?;
+    let updated_asset = assets
+        .iter()
+        .find(|entry| entry.id == asset.id)
+        .cloned()
+        .ok_or_else(|| "Restored asset could not be re-indexed.".to_string())?;
+
+    append_operation_history_entry(
+        &app,
+        operation_history_entry(
+            "restore_version",
+            localized_named_action_detail(
+                &index.settings.language,
+                "恢复版本",
+                "Restored version",
+                &updated_asset.name,
+            ),
+            None,
+        ),
+    )?;
+    save_workspace_index(&app, &index)?;
+    ensure_project_watchers(&app, &index)?;
+    emit_workspace_changed(&app, std::slice::from_ref(&project_id))?;
+
+    Ok(RestoreFileVersionResponse {
+        asset: updated_asset,
+        versions: file_versions_for_asset(&index, &asset.id),
+    })
+}
+
+#[tauri::command]
+pub fn load_project_versions(
+    app: AppHandle,
+    request: ProjectVersionRequest,
+) -> Result<ProjectVersionResponse, String> {
+    let mut index = load_workspace_index(&app)?;
+    sanitize_workspace_index(&mut index);
+    prune_project_versions(&mut index);
+    let project = find_project(&index.projects, &request.project_id)
+        .cloned()
+        .ok_or_else(|| "Project not found.".to_string())?;
+    relocate_project_versions_to_backup_dir(&app, &mut index, &project)?;
+    prune_project_versions(&mut index);
+    let backup_path = project_version_backup_dir(&app, &project)?
+        .to_string_lossy()
+        .into_owned();
+    save_workspace_index(&app, &index)?;
+
+    Ok(ProjectVersionResponse {
+        backup_path,
+        versions: project_versions_for_project(&index, &request.project_id),
+    })
+}
+
+#[tauri::command]
+pub fn create_project_version(
+    app: AppHandle,
+    request: ProjectVersionRequest,
+) -> Result<ProjectVersionResponse, String> {
+    let mut index = load_workspace_index(&app)?;
+    sanitize_workspace_index(&mut index);
+    let project = find_project(&index.projects, &request.project_id)
+        .cloned()
+        .ok_or_else(|| "Project not found.".to_string())?;
+    relocate_project_versions_to_backup_dir(&app, &mut index, &project)?;
+
+    let note = request.note.unwrap_or_default();
+    let version = create_project_version_for_project(&app, &mut index, &project, "manual", note)?;
+    append_operation_history_entry(
+        &app,
+        operation_history_entry(
+            "create_project_version",
+            localized_named_action_detail(
+                &index.settings.language,
+                "保存项目版本",
+                "Saved project version",
+                &version.project_name,
+            ),
+            None,
+        ),
+    )?;
+    save_workspace_index(&app, &index)?;
+
+    Ok(ProjectVersionResponse {
+        backup_path: project_version_backup_dir(&app, &project)?
+            .to_string_lossy()
+            .into_owned(),
+        versions: project_versions_for_project(&index, &project.id),
+    })
+}
+
+#[tauri::command]
+pub fn restore_project_version(
+    app: AppHandle,
+    request: RestoreProjectVersionRequest,
+) -> Result<RestoreProjectVersionResponse, String> {
+    let mut index = load_workspace_index(&app)?;
+    sanitize_workspace_index(&mut index);
+    let project = find_project(&index.projects, &request.project_id)
+        .cloned()
+        .ok_or_else(|| "Project not found.".to_string())?;
+    relocate_project_versions_to_backup_dir(&app, &mut index, &project)?;
+    let version = index
+        .project_version_entries
+        .iter()
+        .find(|entry| entry.project_id == request.project_id && entry.id == request.version_id)
+        .cloned()
+        .ok_or_else(|| "Project version not found.".to_string())?;
+
+    let snapshot_path = PathBuf::from(&version.snapshot_path);
+    if !snapshot_path.is_dir() {
+        index
+            .project_version_entries
+            .retain(|entry| entry.snapshot_path != version.snapshot_path);
+        save_workspace_index(&app, &index)?;
+        return Err("The selected project version snapshot no longer exists.".into());
+    }
+
+    let project_root = PathBuf::from(&project.root_path);
+    if !project_root.is_dir() {
+        return Err("Project folder no longer exists on disk.".into());
+    }
+
+    let before_restore =
+        create_project_version_for_project(&app, &mut index, &project, "before_restore", String::new())?;
+    let excluded_roots = nested_project_roots(&project, &index.projects)?;
+    clear_project_directory_contents(&project_root, &excluded_roots)?;
+    if let Err(error) = copy_dir_recursive_checked(&snapshot_path, &project_root, &[]) {
+        let before_restore_path = PathBuf::from(before_restore.snapshot_path);
+        let _ = clear_project_directory_contents(&project_root, &excluded_roots);
+        let _ = copy_dir_recursive_checked(&before_restore_path, &project_root, &[]);
+        return Err(error);
+    }
+
+    let (project, folders, assets) = rescan_project_records(&mut index, &project.id)?;
+    append_operation_history_entry(
+        &app,
+        operation_history_entry(
+            "restore_project_version",
+            localized_named_action_detail(
+                &index.settings.language,
+                "恢复项目版本",
+                "Restored project version",
+                &project.name,
+            ),
+            None,
+        ),
+    )?;
+    save_workspace_index(&app, &index)?;
+    ensure_project_watchers(&app, &index)?;
+    emit_workspace_changed(&app, std::slice::from_ref(&project.id))?;
+
+    Ok(RestoreProjectVersionResponse {
+        backup_path: project_version_backup_dir(&app, &project)?
+            .to_string_lossy()
+            .into_owned(),
+        versions: project_versions_for_project(&index, &project.id),
+        project,
+        folders,
+        assets,
     })
 }
 
@@ -775,10 +1106,13 @@ pub fn commit_import(
     let mut touched_shortcuts = Vec::new();
     for assignment in &request.assignments {
         let project = find_project(&index.projects, &assignment.target_project_id)
+            .cloned()
             .ok_or_else(|| "Target project no longer exists.".to_string())?;
         changed_project_ids.insert(project.id.clone());
 
-        let target_folder = resolve_target_folder(project, &index.folders, assignment)?;
+        let target_folder = resolve_target_folder(&project, &index.folders, assignment)?;
+        let target_join_path = target_folder.join_path.clone();
+        let target_folder_record = target_folder.folder.clone();
         let source_path = PathBuf::from(&assignment.source_path);
         if !source_path.is_file() {
             return Err(format!(
@@ -790,28 +1124,36 @@ pub fn commit_import(
         let file_name = source_path
             .file_name()
             .ok_or_else(|| "Imported file is missing a valid file name.".to_string())?;
-        let destination = resolve_import_destination(
-            &target_folder.join_path,
+        let import_destination = resolve_import_destination(
+            &target_join_path,
             file_name,
             &assignment.conflict_strategy,
             &recycle_dir,
+            &index.settings.language,
         )?;
-        if destination == ImportDestination::Skip {
+        let recycled_conflict = import_destination.recycled_conflict().cloned();
+        let replaced_asset = recycled_conflict.as_ref().and_then(|conflict| {
+            let original_path = conflict.original_path.to_string_lossy();
+            index
+                .assets
+                .iter()
+                .find(|existing| existing.managed_path == original_path)
+                .cloned()
+        });
+        let Some(destination) = import_destination.into_path() else {
             continue;
-        }
-        let destination = destination
-            .into_path()
-            .ok_or_else(|| "Target import path is invalid.".to_string())?;
+        };
         move_source_file(&source_path, &destination)?;
 
         let metadata = fs::metadata(&destination).map_err(|error| error.to_string())?;
         let descriptor = describe_file(&destination)?;
+        let relative_path = relative_to_root(Path::new(&project.root_path), &destination);
         let asset = AssetRecord {
-            id: format!("asset-{}", Local::now().timestamp_millis()),
+            id: asset_id(&project.id, &relative_path),
             project_id: project.id.clone(),
-            folder_id: Some(target_folder.folder.id.clone()),
-            relative_folder_path: target_folder.folder.relative_path.clone(),
-            relative_path: relative_to_root(Path::new(&project.root_path), &destination),
+            folder_id: Some(target_folder_record.id.clone()),
+            relative_folder_path: target_folder_record.relative_path.clone(),
+            relative_path,
             managed_path: destination.to_string_lossy().into_owned(),
             name: descriptor.file_name,
             format: descriptor.extension.to_uppercase(),
@@ -827,6 +1169,31 @@ pub fn commit_import(
             fingerprint: asset_fingerprint(&destination, metadata.len())?,
         };
 
+        if let Some(recycled_conflict) = recycled_conflict {
+            index.recycle_entries.insert(
+                0,
+                recycle_entry_from_import_conflict(&project.id, &recycled_conflict),
+            );
+            if let Some(replaced_asset) = replaced_asset {
+                let version_source_path = recycled_conflict.recycle_path.clone();
+                if let Err(error) = create_file_version_from_path(
+                    &app,
+                    &mut index,
+                    FileVersionSource {
+                        asset_id: &replaced_asset.id,
+                        project_id: &replaced_asset.project_id,
+                        name: &replaced_asset.name,
+                        relative_path: &replaced_asset.relative_path,
+                        original_path: &replaced_asset.managed_path,
+                        source_path: &version_source_path,
+                        reason: "before_replace",
+                        note: String::new(),
+                    },
+                ) {
+                    log::warn!("Unable to snapshot replaced file version: {error}");
+                }
+            }
+        }
         index.assets.retain(|existing| {
             existing.id != asset.id && existing.managed_path != asset.managed_path
         });
@@ -840,7 +1207,7 @@ pub fn commit_import(
         imported_assets.push(asset);
         touched_shortcuts.push(FolderShortcutRecord {
             project_id: project.id.clone(),
-            relative_path: target_folder.folder.relative_path.clone(),
+            relative_path: target_folder_record.relative_path.clone(),
         });
     }
 
@@ -1210,6 +1577,7 @@ pub fn rename_asset(
         .find(|asset| asset.relative_path == next_relative_path)
         .cloned()
         .ok_or_else(|| "Renamed asset could not be re-indexed.".to_string())?;
+    reassign_file_versions(&mut index, &current_asset.id, &updated_asset);
 
     append_operation_history_entry(
         &app,
@@ -1234,7 +1602,7 @@ pub fn rename_asset(
 
     save_workspace_index(&app, &index)?;
     ensure_project_watchers(&app, &index)?;
-    emit_workspace_changed(&app, &[project.id.clone()])?;
+    emit_workspace_changed(&app, std::slice::from_ref(&project.id))?;
     Ok(RenameAssetResponse {
         asset: updated_asset,
     })
@@ -1265,8 +1633,12 @@ pub fn move_assets(
     let mut changed_project_ids = HashSet::new();
     let mut moved_count = 0usize;
     let mut moved_files = Vec::new();
-    for asset_id in &request.asset_ids {
-        let Some(position) = index.assets.iter().position(|asset| &asset.id == asset_id) else {
+    for requested_asset_id in &request.asset_ids {
+        let Some(position) = index
+            .assets
+            .iter()
+            .position(|asset| &asset.id == requested_asset_id)
+        else {
             continue;
         };
         let asset = index.assets[position].clone();
@@ -1294,18 +1666,24 @@ pub fn move_assets(
             to_path: next_path.to_string_lossy().into_owned(),
         });
 
-        let updated_asset = &mut index.assets[position];
-        updated_asset.folder_id = Some(target_folder.id.clone());
-        updated_asset.relative_folder_path = target_folder.relative_path.clone();
-        updated_asset.relative_path = relative_to_root(Path::new(&project.root_path), &next_path);
-        updated_asset.managed_path = next_path.to_string_lossy().into_owned();
-        updated_asset.last_modified_at = modified_label(&next_path)?;
-        updated_asset.fingerprint = asset_fingerprint(
-            &next_path,
-            fs::metadata(&next_path)
-                .map_err(|error| error.to_string())?
-                .len(),
-        )?;
+        let updated_asset_snapshot = {
+            let updated_asset = &mut index.assets[position];
+            updated_asset.folder_id = Some(target_folder.id.clone());
+            updated_asset.relative_folder_path = target_folder.relative_path.clone();
+            updated_asset.relative_path =
+                relative_to_root(Path::new(&project.root_path), &next_path);
+            updated_asset.id = asset_id(&project.id, &updated_asset.relative_path);
+            updated_asset.managed_path = next_path.to_string_lossy().into_owned();
+            updated_asset.last_modified_at = modified_label(&next_path)?;
+            updated_asset.fingerprint = asset_fingerprint(
+                &next_path,
+                fs::metadata(&next_path)
+                    .map_err(|error| error.to_string())?
+                    .len(),
+            )?;
+            updated_asset.clone()
+        };
+        reassign_file_versions(&mut index, &asset.id, &updated_asset_snapshot);
 
         changed_project_ids.insert(project.id.clone());
         moved_count += 1;
@@ -1677,7 +2055,7 @@ pub fn create_folder(
     let (_, folders, assets) = rescan_project_records(&mut index, &project.id)?;
     save_workspace_index(&app, &index)?;
     ensure_project_watchers(&app, &index)?;
-    emit_workspace_changed(&app, &[project.id.clone()])?;
+    emit_workspace_changed(&app, std::slice::from_ref(&project.id))?;
 
     Ok(FolderMutationResponse {
         folders,
@@ -1731,7 +2109,7 @@ pub fn rename_folder(
     let (_, folders, assets) = rescan_project_records(&mut index, &project.id)?;
     save_workspace_index(&app, &index)?;
     ensure_project_watchers(&app, &index)?;
-    emit_workspace_changed(&app, &[project.id.clone()])?;
+    emit_workspace_changed(&app, std::slice::from_ref(&project.id))?;
 
     Ok(FolderMutationResponse {
         folders,
@@ -1791,7 +2169,7 @@ pub fn delete_folder(
     let (_, folders, assets) = rescan_project_records(&mut index, &project.id)?;
     save_workspace_index(&app, &index)?;
     ensure_project_watchers(&app, &index)?;
-    emit_workspace_changed(&app, &[project.id.clone()])?;
+    emit_workspace_changed(&app, std::slice::from_ref(&project.id))?;
 
     Ok(FolderMutationResponse {
         folders,
@@ -2025,7 +2403,11 @@ fn refresh_workspace_folders(index: &mut WorkspaceIndex) -> Result<(), String> {
     index.folders = all_folders;
     refresh_rule_attention(&mut index.rules, &index.folders);
 
-    let valid_folder_ids: HashSet<String> = index.folders.iter().map(|folder| folder.id.clone()).collect();
+    let valid_folder_ids: HashSet<String> = index
+        .folders
+        .iter()
+        .map(|folder| folder.id.clone())
+        .collect();
     for asset in &mut index.assets {
         if asset
             .folder_id
@@ -2064,7 +2446,11 @@ fn sanitize_workspace_index(index: &mut WorkspaceIndex) -> bool {
         changed = true;
     }
 
-    let valid_folder_ids: HashSet<String> = index.folders.iter().map(|folder| folder.id.clone()).collect();
+    let valid_folder_ids: HashSet<String> = index
+        .folders
+        .iter()
+        .map(|folder| folder.id.clone())
+        .collect();
     let asset_count = index.assets.len();
     index
         .assets
@@ -2081,6 +2467,26 @@ fn sanitize_workspace_index(index: &mut WorkspaceIndex) -> bool {
             asset.folder_id = None;
             changed = true;
         }
+    }
+
+    let valid_asset_ids: HashSet<String> =
+        index.assets.iter().map(|asset| asset.id.clone()).collect();
+    let version_count = index.version_entries.len();
+    index.version_entries.retain(|version| {
+        valid_project_ids.contains(&version.project_id)
+            && valid_asset_ids.contains(&version.asset_id)
+            && Path::new(&version.snapshot_path).is_file()
+    });
+    if index.version_entries.len() != version_count {
+        changed = true;
+    }
+
+    let project_version_count = index.project_version_entries.len();
+    index.project_version_entries.retain(|version| {
+        valid_project_ids.contains(&version.project_id) && Path::new(&version.snapshot_path).is_dir()
+    });
+    if index.project_version_entries.len() != project_version_count {
+        changed = true;
     }
 
     let rule_count = index.rules.len();
@@ -2109,7 +2515,11 @@ fn sanitize_workspace_index(index: &mut WorkspaceIndex) -> bool {
         changed = true;
     }
 
-    let previous_attention: Vec<bool> = index.rules.iter().map(|rule| rule.needs_attention).collect();
+    let previous_attention: Vec<bool> = index
+        .rules
+        .iter()
+        .map(|rule| rule.needs_attention)
+        .collect();
     refresh_rule_attention(&mut index.rules, &index.folders);
     if previous_attention
         .iter()
@@ -2156,12 +2566,17 @@ fn rescan_projects(
     index: &mut WorkspaceIndex,
     project_ids: impl IntoIterator<Item = String>,
 ) -> Result<(), String> {
-    let existing_project_ids: HashSet<String> =
-        index.projects.iter().map(|project| project.id.clone()).collect();
+    let existing_project_ids: HashSet<String> = index
+        .projects
+        .iter()
+        .map(|project| project.id.clone())
+        .collect();
     let mut rescanned_project_ids = HashSet::new();
 
     for project_id in project_ids {
-        if !existing_project_ids.contains(&project_id) || !rescanned_project_ids.insert(project_id.clone()) {
+        if !existing_project_ids.contains(&project_id)
+            || !rescanned_project_ids.insert(project_id.clone())
+        {
             continue;
         }
         let _ = rescan_project_records(index, &project_id)?;
@@ -2191,7 +2606,8 @@ fn ensure_project_watchers(app: &AppHandle, index: &WorkspaceIndex) -> Result<()
                 if result.is_err() {
                     return;
                 }
-                let _ = maybe_emit_workspace_changed(&app_handle, &[project_id.clone()]);
+                let _ =
+                    maybe_emit_workspace_changed(&app_handle, std::slice::from_ref(&project_id));
             },
             Config::default(),
         ) {
@@ -2426,7 +2842,7 @@ fn nested_project_roots(
         .canonicalize()
         .map_err(|error| error.to_string())?;
 
-    Ok(all_projects
+    let mut excluded_roots: Vec<PathBuf> = all_projects
         .iter()
         .filter(|other| other.id != project.id)
         .filter_map(|other| {
@@ -2441,11 +2857,28 @@ fn nested_project_roots(
                 None
             }
         })
-        .collect())
+        .collect();
+
+    for backup_dir in all_projects
+        .iter()
+        .filter_map(project_version_backup_dir_without_app)
+    {
+        if !backup_dir.is_dir() {
+            continue;
+        }
+        let Some(canonical) = backup_dir.canonicalize().ok() else {
+            continue;
+        };
+        if canonical.starts_with(&project_root) {
+            excluded_roots.push(canonical);
+        }
+    }
+
+    Ok(excluded_roots)
 }
 
 fn should_skip_scan_path(path: &Path, excluded_roots: &[PathBuf]) -> bool {
-    excluded_roots.iter().any(|root| same_path(path, root))
+    is_path_inside_any_root(path, excluded_roots)
 }
 
 fn describe_file(path: &Path) -> Result<FileDescriptor, String> {
@@ -2744,16 +3177,37 @@ struct ResolvedFolder<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ImportDestination {
     Skip,
-    Path(PathBuf),
+    Path {
+        destination: PathBuf,
+        recycled_conflict: Option<RecycledImportConflict>,
+    },
 }
 
 impl ImportDestination {
     fn into_path(self) -> Option<PathBuf> {
         match self {
-            Self::Path(path) => Some(path),
+            Self::Path { destination, .. } => Some(destination),
             Self::Skip => None,
         }
     }
+
+    fn recycled_conflict(&self) -> Option<&RecycledImportConflict> {
+        match self {
+            Self::Path {
+                recycled_conflict, ..
+            } => recycled_conflict.as_ref(),
+            Self::Skip => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecycledImportConflict {
+    original_path: PathBuf,
+    recycle_path: PathBuf,
+    name: String,
+    kind: String,
+    size_label: String,
 }
 
 fn resolve_import_destination(
@@ -2761,19 +3215,70 @@ fn resolve_import_destination(
     file_name: &std::ffi::OsStr,
     strategy: &str,
     recycle_dir: &Path,
+    language: &str,
 ) -> Result<ImportDestination, String> {
     let exact_path = target_dir.join(file_name);
     match strategy {
         "skip" if exact_path.exists() => Ok(ImportDestination::Skip),
         "replace" if exact_path.exists() => {
+            let metadata = fs::metadata(&exact_path).map_err(|error| error.to_string())?;
             let recycle_target = recycle_destination(recycle_dir, &exact_path)?;
             move_path_to_recycle(&exact_path, &recycle_target)?;
-            Ok(ImportDestination::Path(exact_path))
+            Ok(ImportDestination::Path {
+                destination: exact_path.clone(),
+                recycled_conflict: Some(RecycledImportConflict {
+                    original_path: exact_path,
+                    recycle_path: recycle_target,
+                    name: file_name.to_string_lossy().into_owned(),
+                    kind: if metadata.is_dir() { "folder" } else { "file" }.into(),
+                    size_label: recycle_size_label(&metadata, language),
+                }),
+            })
         }
-        "replace" => Ok(ImportDestination::Path(exact_path)),
-        "keep_both" | _ => Ok(ImportDestination::Path(unique_destination(
-            target_dir, file_name,
-        ))),
+        "replace" => Ok(ImportDestination::Path {
+            destination: exact_path,
+            recycled_conflict: None,
+        }),
+        "keep_both" => Ok(ImportDestination::Path {
+            destination: unique_destination(target_dir, file_name),
+            recycled_conflict: None,
+        }),
+        _ => Ok(ImportDestination::Path {
+            destination: unique_destination(target_dir, file_name),
+            recycled_conflict: None,
+        }),
+    }
+}
+
+fn recycle_size_label(metadata: &fs::Metadata, language: &str) -> String {
+    if metadata.is_dir() {
+        if language == DEFAULT_LANGUAGE {
+            "文件夹".into()
+        } else {
+            "Folder".into()
+        }
+    } else {
+        format_bytes(metadata.len())
+    }
+}
+
+fn recycle_entry_from_import_conflict(
+    project_id: &str,
+    conflict: &RecycledImportConflict,
+) -> RecycleEntryRecord {
+    RecycleEntryRecord {
+        id: format!(
+            "recycle-{}-{}",
+            Local::now().timestamp_nanos_opt().unwrap_or_default(),
+            sanitize_for_id(&conflict.name),
+        ),
+        project_id: Some(project_id.to_string()),
+        name: conflict.name.clone(),
+        kind: conflict.kind.clone(),
+        original_path: conflict.original_path.to_string_lossy().into_owned(),
+        recycle_path: conflict.recycle_path.to_string_lossy().into_owned(),
+        deleted_at: now_label(),
+        size_label: conflict.size_label.clone(),
     }
 }
 
@@ -2924,6 +3429,44 @@ fn recycle_destination(recycle_dir: &Path, source_path: &Path) -> Result<PathBuf
 
 fn recycle_bin_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(state_dir(app)?.join(RECYCLE_BIN_FOLDER_NAME))
+}
+
+fn version_store_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(state_dir(app)?.join(VERSION_STORE_FOLDER_NAME))
+}
+
+fn project_version_store_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(state_dir(app)?.join(PROJECT_VERSION_STORE_FOLDER_NAME))
+}
+
+fn project_version_backup_dir(app: &AppHandle, project: &ProjectRecord) -> Result<PathBuf, String> {
+    let project_root = PathBuf::from(&project.root_path);
+    let Some(parent) = project_root.parent() else {
+        return Ok(project_version_store_dir(app)?.join(sanitize_for_id(&project.id)));
+    };
+    let folder_name = project_root
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| sanitize_for_id(&project.name));
+
+    Ok(parent.join(format!(
+        "{folder_name}_{PROJECT_VERSION_BACKUP_FOLDER_SUFFIX}"
+    )))
+}
+
+fn project_version_backup_dir_without_app(project: &ProjectRecord) -> Option<PathBuf> {
+    let project_root = PathBuf::from(&project.root_path);
+    let parent = project_root.parent()?;
+    let folder_name = project_root
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| sanitize_for_id(&project.name));
+
+    Some(parent.join(format!(
+        "{folder_name}_{PROJECT_VERSION_BACKUP_FOLDER_SUFFIX}"
+    )))
 }
 
 fn remove_recycle_paths_from_history(
@@ -3389,14 +3932,16 @@ fn extract_windows_thumbnail_png(
 
     let width = info.bmWidth as u32;
     let height = info.bmHeight as u32;
-    let mut bitmap_info = BITMAPINFO::default();
-    bitmap_info.bmiHeader = BITMAPINFOHEADER {
-        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-        biWidth: width as i32,
-        biHeight: -(height as i32),
-        biPlanes: 1,
-        biBitCount: 32,
-        biCompression: BI_RGB.0,
+    let mut bitmap_info = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width as i32,
+            biHeight: -(height as i32),
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -3707,6 +4252,10 @@ fn find_folder<'a>(folders: &'a [FolderRecord], id: &str) -> Option<&'a FolderRe
     folders.iter().find(|folder| folder.id == id)
 }
 
+fn find_asset<'a>(assets: &'a [AssetRecord], id: &str) -> Option<&'a AssetRecord> {
+    assets.iter().find(|asset| asset.id == id)
+}
+
 fn folder_id(project_id: &str, relative_path: &str) -> String {
     format!("folder-{project_id}-{}", sanitize_for_id(relative_path))
 }
@@ -3732,15 +4281,492 @@ fn sanitize_for_id(value: &str) -> String {
     result
 }
 
+fn create_project_version_for_project(
+    app: &AppHandle,
+    index: &mut WorkspaceIndex,
+    project: &ProjectRecord,
+    reason: &str,
+    note: String,
+) -> Result<ProjectVersionRecord, String> {
+    let project_root = PathBuf::from(&project.root_path);
+    if !project_root.is_dir() {
+        return Err("Project folder no longer exists on disk.".into());
+    }
+
+    let excluded_roots = nested_project_roots(project, &index.projects)?;
+    let (file_count, total_size_bytes) = project_snapshot_stats(&project_root, &excluded_roots)?;
+    let version_id = format!(
+        "project-version-{}-{}",
+        Local::now().timestamp_nanos_opt().unwrap_or_default(),
+        sanitize_for_id(&project.id)
+    );
+    let version_dir = project_version_backup_dir(app, project)?;
+    fs::create_dir_all(&version_dir).map_err(|error| error.to_string())?;
+    let snapshot_folder_name = format!(
+        "{}_{}",
+        Local::now().format("%Y%m%d_%H%M%S"),
+        project_version_reason_folder_suffix(reason)
+    );
+    let snapshot_path = unique_destination(&version_dir, std::ffi::OsStr::new(&snapshot_folder_name));
+    if let Err(error) = copy_dir_recursive_checked(&project_root, &snapshot_path, &excluded_roots)
+    {
+        let _ = fs::remove_dir_all(&snapshot_path);
+        return Err(error);
+    }
+
+    let version = ProjectVersionRecord {
+        id: version_id,
+        project_id: project.id.clone(),
+        project_name: project.name.clone(),
+        root_path: project.root_path.clone(),
+        snapshot_path: snapshot_path.to_string_lossy().into_owned(),
+        created_at: now_label(),
+        reason: reason.to_string(),
+        note: note.trim().to_string(),
+        file_count,
+        total_size_bytes,
+        total_size_label: format_bytes(total_size_bytes),
+    };
+
+    index.project_version_entries.insert(0, version.clone());
+    prune_project_versions_for_project(index, &project.id);
+    Ok(version)
+}
+
+fn project_version_reason_folder_suffix(reason: &str) -> &'static str {
+    match reason {
+        "before_restore" => "before_restore",
+        "manual" => "manual",
+        _ => "snapshot",
+    }
+}
+
+fn project_snapshot_stats(root: &Path, excluded_roots: &[PathBuf]) -> Result<(usize, u64), String> {
+    let mut file_count = 0usize;
+    let mut total_size_bytes = 0u64;
+    for file in walk_files(root, excluded_roots)? {
+        let metadata = fs::metadata(&file).map_err(|error| error.to_string())?;
+        file_count += 1;
+        total_size_bytes = total_size_bytes.saturating_add(metadata.len());
+    }
+    Ok((file_count, total_size_bytes))
+}
+
+fn project_versions_for_project(
+    index: &WorkspaceIndex,
+    project_id: &str,
+) -> Vec<ProjectVersionRecord> {
+    index
+        .project_version_entries
+        .iter()
+        .filter(|entry| entry.project_id == project_id && Path::new(&entry.snapshot_path).is_dir())
+        .cloned()
+        .collect()
+}
+
+fn prune_project_versions(index: &mut WorkspaceIndex) {
+    index
+        .project_version_entries
+        .retain(|entry| Path::new(&entry.snapshot_path).is_dir());
+
+    let project_ids: Vec<String> = index
+        .project_version_entries
+        .iter()
+        .map(|entry| entry.project_id.clone())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    for project_id in project_ids {
+        prune_project_versions_for_project(index, &project_id);
+    }
+}
+
+fn prune_project_versions_for_project(index: &mut WorkspaceIndex, project_id: &str) {
+    let mut retained_count = 0usize;
+    index.project_version_entries.retain(|entry| {
+        if entry.project_id != project_id {
+            return true;
+        }
+
+        retained_count += 1;
+        if retained_count <= MAX_PROJECT_VERSIONS_PER_PROJECT {
+            return true;
+        }
+
+        let _ = fs::remove_dir_all(&entry.snapshot_path);
+        false
+    });
+}
+
+fn relocate_project_versions_to_backup_dir(
+    app: &AppHandle,
+    index: &mut WorkspaceIndex,
+    project: &ProjectRecord,
+) -> Result<(), String> {
+    let backup_dir = project_version_backup_dir(app, project)?;
+    let canonical_backup_dir = backup_dir.canonicalize().ok();
+    let mut needs_backup_dir = false;
+
+    for entry in index
+        .project_version_entries
+        .iter_mut()
+        .filter(|entry| entry.project_id == project.id)
+    {
+        let current_path = PathBuf::from(&entry.snapshot_path);
+        if !current_path.is_dir() {
+            continue;
+        }
+
+        let current_canonical = current_path
+            .canonicalize()
+            .unwrap_or_else(|_| current_path.clone());
+        if canonical_backup_dir
+            .as_ref()
+            .is_some_and(|backup| current_canonical.starts_with(backup))
+        {
+            continue;
+        }
+
+        if !needs_backup_dir {
+            fs::create_dir_all(&backup_dir).map_err(|error| error.to_string())?;
+            needs_backup_dir = true;
+        }
+        let folder_name = current_path
+            .file_name()
+            .unwrap_or_else(|| std::ffi::OsStr::new(&entry.id));
+        let destination = unique_destination(&backup_dir, folder_name);
+        move_dir_checked(&current_path, &destination)?;
+        entry.snapshot_path = destination.to_string_lossy().into_owned();
+    }
+
+    Ok(())
+}
+
+fn move_dir_checked(source_dir: &Path, destination_dir: &Path) -> Result<(), String> {
+    if let Some(parent) = destination_dir.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    match fs::rename(source_dir, destination_dir) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            copy_dir_recursive_checked(source_dir, destination_dir, &[])?;
+            fs::remove_dir_all(source_dir).map_err(|error| error.to_string())
+        }
+    }
+}
+
+fn copy_dir_recursive_checked(
+    source_dir: &Path,
+    destination_dir: &Path,
+    excluded_roots: &[PathBuf],
+) -> Result<(), String> {
+    fs::create_dir_all(destination_dir).map_err(|error| error.to_string())?;
+
+    for entry in fs::read_dir(source_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let source_path = entry.path();
+        if is_path_inside_any_root(&source_path, excluded_roots) {
+            continue;
+        }
+
+        let destination_path = destination_dir.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_recursive_checked(&source_path, &destination_path, excluded_roots)?;
+        } else if source_path.is_file() {
+            copy_file_checked(&source_path, &destination_path)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn clear_project_directory_contents(root: &Path, excluded_roots: &[PathBuf]) -> Result<(), String> {
+    if !root.is_dir() {
+        return Err("Project folder no longer exists on disk.".into());
+    }
+
+    for entry in fs::read_dir(root).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        if is_path_inside_any_root(&path, excluded_roots) {
+            continue;
+        }
+
+        if path.is_dir() {
+            if contains_any_root(&path, excluded_roots) {
+                clear_project_directory_contents(&path, excluded_roots)?;
+            } else {
+                fs::remove_dir_all(&path).map_err(|error| error.to_string())?;
+            }
+        } else if path.is_file() {
+            fs::remove_file(&path).map_err(|error| error.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn canonical_or_original(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn is_path_inside_any_root(path: &Path, roots: &[PathBuf]) -> bool {
+    let canonical_path = canonical_or_original(path);
+    roots.iter().any(|root| {
+        let canonical_root = canonical_or_original(root);
+        canonical_path == canonical_root || canonical_path.starts_with(&canonical_root)
+    })
+}
+
+fn contains_any_root(path: &Path, roots: &[PathBuf]) -> bool {
+    let canonical_path = canonical_or_original(path);
+    roots.iter().any(|root| {
+        let canonical_root = canonical_or_original(root);
+        canonical_root.starts_with(&canonical_path)
+    })
+}
+
+struct FileVersionSource<'a> {
+    asset_id: &'a str,
+    project_id: &'a str,
+    name: &'a str,
+    relative_path: &'a str,
+    original_path: &'a str,
+    source_path: &'a Path,
+    reason: &'a str,
+    note: String,
+}
+
+fn create_file_version_for_asset(
+    app: &AppHandle,
+    index: &mut WorkspaceIndex,
+    asset: &AssetRecord,
+    reason: &str,
+    note: String,
+) -> Result<FileVersionRecord, String> {
+    let source_path = PathBuf::from(&asset.managed_path);
+    create_file_version_from_path(
+        app,
+        index,
+        FileVersionSource {
+            asset_id: &asset.id,
+            project_id: &asset.project_id,
+            name: &asset.name,
+            relative_path: &asset.relative_path,
+            original_path: &asset.managed_path,
+            source_path: &source_path,
+            reason,
+            note,
+        },
+    )
+}
+
+fn create_file_version_from_path(
+    app: &AppHandle,
+    index: &mut WorkspaceIndex,
+    source: FileVersionSource<'_>,
+) -> Result<FileVersionRecord, String> {
+    if !source.source_path.is_file() {
+        return Err("Version source file no longer exists on disk.".into());
+    }
+
+    let metadata = fs::metadata(source.source_path).map_err(|error| error.to_string())?;
+    let version_id = format!(
+        "version-{}-{}",
+        Local::now().timestamp_nanos_opt().unwrap_or_default(),
+        sanitize_for_id(source.asset_id)
+    );
+    let file_name = source
+        .source_path
+        .file_name()
+        .ok_or_else(|| "Version source file is missing a name.".to_string())?
+        .to_string_lossy();
+    let version_dir = version_store_dir(app)?.join(sanitize_for_id(source.asset_id));
+    fs::create_dir_all(&version_dir).map_err(|error| error.to_string())?;
+    let snapshot_name = format!("{version_id}-{file_name}");
+    let snapshot_path = unique_destination(&version_dir, std::ffi::OsStr::new(&snapshot_name));
+    copy_file_checked(source.source_path, &snapshot_path)?;
+
+    let version = FileVersionRecord {
+        id: version_id,
+        asset_id: source.asset_id.to_string(),
+        project_id: source.project_id.to_string(),
+        name: source.name.to_string(),
+        relative_path: source.relative_path.to_string(),
+        original_path: source.original_path.to_string(),
+        snapshot_path: snapshot_path.to_string_lossy().into_owned(),
+        created_at: now_label(),
+        reason: source.reason.to_string(),
+        note: source.note.trim().to_string(),
+        file_size_bytes: metadata.len(),
+        file_size_label: format_bytes(metadata.len()),
+        fingerprint: asset_fingerprint(source.source_path, metadata.len())?,
+    };
+
+    index.version_entries.insert(0, version.clone());
+    prune_file_versions_for_asset(index, source.asset_id);
+    Ok(version)
+}
+
+fn copy_file_checked(source_path: &Path, destination: &Path) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    fs::copy(source_path, destination).map_err(|error| error.to_string())?;
+    let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
+    let destination_metadata = fs::metadata(destination).map_err(|error| error.to_string())?;
+    if source_metadata.len() != destination_metadata.len() {
+        let _ = fs::remove_file(destination);
+        return Err("Copied version file size does not match the source file.".into());
+    }
+    Ok(())
+}
+
+fn file_versions_for_asset(index: &WorkspaceIndex, asset_id: &str) -> Vec<FileVersionRecord> {
+    index
+        .version_entries
+        .iter()
+        .filter(|entry| entry.asset_id == asset_id && Path::new(&entry.snapshot_path).is_file())
+        .cloned()
+        .collect()
+}
+
+fn prune_file_versions(index: &mut WorkspaceIndex) {
+    index
+        .version_entries
+        .retain(|entry| Path::new(&entry.snapshot_path).is_file());
+
+    let asset_ids: Vec<String> = index
+        .version_entries
+        .iter()
+        .map(|entry| entry.asset_id.clone())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    for asset_id in asset_ids {
+        prune_file_versions_for_asset(index, &asset_id);
+    }
+}
+
+fn prune_file_versions_for_asset(index: &mut WorkspaceIndex, asset_id: &str) {
+    let mut retained_count = 0usize;
+    index.version_entries.retain(|entry| {
+        if entry.asset_id != asset_id {
+            return true;
+        }
+
+        retained_count += 1;
+        if retained_count <= MAX_FILE_VERSIONS_PER_ASSET {
+            return true;
+        }
+
+        let _ = fs::remove_file(&entry.snapshot_path);
+        false
+    });
+}
+
+fn reassign_file_versions(
+    index: &mut WorkspaceIndex,
+    previous_asset_id: &str,
+    asset: &AssetRecord,
+) {
+    for version in index
+        .version_entries
+        .iter_mut()
+        .filter(|entry| entry.asset_id == previous_asset_id)
+    {
+        version.asset_id = asset.id.clone();
+        version.project_id = asset.project_id.clone();
+        version.name = asset.name.clone();
+        version.relative_path = asset.relative_path.clone();
+        version.original_path = asset.managed_path.clone();
+    }
+}
+
+fn unique_destination(target_dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
+    let original = Path::new(file_name);
+    let stem = original
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "asset".into());
+    let extension = original
+        .extension()
+        .map(|value| value.to_string_lossy().into_owned());
+
+    let mut candidate = target_dir.join(file_name);
+    let mut counter = 2;
+    while candidate.exists() {
+        let renamed = match &extension {
+            Some(extension) if !extension.is_empty() => format!("{stem}-{counter}.{extension}"),
+            _ => format!("{stem}-{counter}"),
+        };
+        candidate = target_dir.join(renamed);
+        counter += 1;
+    }
+    candidate
+}
+
+fn relative_to_root(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .map(|value| value.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.to_string_lossy().replace('\\', "/"))
+}
+
+fn extension_lowercase(path: &Path) -> String {
+    path.extension()
+        .map(|value| value.to_string_lossy().to_lowercase())
+        .unwrap_or_else(|| "file".into())
+}
+
+fn modified_label(path: &Path) -> Result<String, String> {
+    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+    let modified = metadata.modified().map_err(|error| error.to_string())?;
+    let datetime: chrono::DateTime<Local> = modified.into();
+    Ok(datetime.format("%Y-%m-%d %H:%M").to_string())
+}
+
+fn now_label() -> String {
+    Local::now().format("%Y-%m-%d %H:%M").to_string()
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+
+    let bytes_f64 = bytes as f64;
+    if bytes_f64 >= GB {
+        format!("{:.1} GB", bytes_f64 / GB)
+    } else if bytes_f64 >= MB {
+        format!("{:.1} MB", bytes_f64 / MB)
+    } else if bytes_f64 >= KB {
+        format!("{:.1} KB", bytes_f64 / KB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        asset_id, choose_assignment, collect_native_drag_paths, describe_file, folder_id,
-        normalize_workspace, rescan_project_records, scan_project_assets, scan_project_folders,
-        ProjectRecord, WorkspaceIndex,
+        asset_id, choose_assignment, clear_project_directory_contents, collect_native_drag_paths,
+        copy_dir_recursive_checked, describe_file, folder_id, normalize_workspace,
+        nested_project_roots, project_snapshot_stats, project_version_backup_dir_without_app,
+        reassign_file_versions, recycle_entry_from_import_conflict, rescan_project_records,
+        resolve_import_destination, scan_project_assets, scan_project_folders, AssetRecord,
+        FileVersionRecord, ImportDestination, ProjectRecord, WorkspaceIndex, DEFAULT_LANGUAGE,
     };
     use chrono::Local;
-    use std::{env, fs, path::PathBuf};
+    use std::{env, ffi::OsStr, fs, path::PathBuf};
 
     fn make_test_project(root_path: PathBuf) -> ProjectRecord {
         ProjectRecord {
@@ -4024,6 +5050,210 @@ mod tests {
     }
 
     #[test]
+    fn replace_import_moves_existing_file_into_tracked_recycle_entry() {
+        let root = env::temp_dir().join(format!(
+            "fluxmint-import-replace-{}",
+            Local::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let target_dir = root.join("target");
+        let recycle_dir = root.join("recycle");
+        fs::create_dir_all(&target_dir).unwrap();
+        fs::create_dir_all(&recycle_dir).unwrap();
+        let existing_path = target_dir.join("hero.png");
+        fs::write(&existing_path, b"old").unwrap();
+
+        let destination = resolve_import_destination(
+            &target_dir,
+            OsStr::new("hero.png"),
+            "replace",
+            &recycle_dir,
+            DEFAULT_LANGUAGE,
+        )
+        .unwrap();
+
+        let ImportDestination::Path {
+            destination,
+            recycled_conflict: Some(conflict),
+        } = destination
+        else {
+            panic!("replace should return a tracked recycled conflict");
+        };
+        let recycle_entry = recycle_entry_from_import_conflict("project-demo", &conflict);
+
+        assert_eq!(destination, existing_path);
+        assert!(!existing_path.exists());
+        assert!(conflict.recycle_path.is_file());
+        assert_eq!(fs::read(&conflict.recycle_path).unwrap(), b"old");
+        assert_eq!(recycle_entry.project_id.as_deref(), Some("project-demo"));
+        assert_eq!(recycle_entry.original_path, existing_path.to_string_lossy());
+        assert_eq!(
+            recycle_entry.recycle_path,
+            conflict.recycle_path.to_string_lossy()
+        );
+        assert_eq!(recycle_entry.name, "hero.png");
+        assert_eq!(recycle_entry.kind, "file");
+        assert_eq!(recycle_entry.size_label, "3 B");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_snapshot_copy_and_restore_replaces_project_tree() {
+        let root = env::temp_dir().join(format!(
+            "fluxmint-project-version-{}",
+            Local::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let snapshot = env::temp_dir().join(format!(
+            "fluxmint-project-version-snapshot-{}",
+            Local::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(root.join("Design")).unwrap();
+        fs::write(root.join("Design").join("hero.txt"), b"v1").unwrap();
+        fs::write(root.join("brief.md"), b"brief").unwrap();
+
+        let (file_count, total_size) = project_snapshot_stats(&root, &[]).unwrap();
+        copy_dir_recursive_checked(&root, &snapshot, &[]).unwrap();
+
+        fs::write(root.join("Design").join("hero.txt"), b"v2").unwrap();
+        fs::write(root.join("new.txt"), b"new").unwrap();
+        clear_project_directory_contents(&root, &[]).unwrap();
+        copy_dir_recursive_checked(&snapshot, &root, &[]).unwrap();
+
+        assert_eq!(file_count, 2);
+        assert_eq!(total_size, 7);
+        assert_eq!(fs::read(root.join("Design").join("hero.txt")).unwrap(), b"v1");
+        assert_eq!(fs::read(root.join("brief.md")).unwrap(), b"brief");
+        assert!(!root.join("new.txt").exists());
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(snapshot);
+    }
+
+    #[test]
+    fn project_restore_clear_preserves_nested_bound_project_roots() {
+        let root = env::temp_dir().join(format!(
+            "fluxmint-project-version-nested-{}",
+            Local::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let nested = root.join("NestedProject");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(root.join("remove.txt"), b"remove").unwrap();
+        fs::write(nested.join("keep.txt"), b"keep").unwrap();
+
+        let excluded = vec![nested.canonicalize().unwrap()];
+        clear_project_directory_contents(&root, &excluded).unwrap();
+
+        assert!(!root.join("remove.txt").exists());
+        assert_eq!(fs::read(nested.join("keep.txt")).unwrap(), b"keep");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_version_backup_folder_is_visible_sibling_and_scan_excluded() {
+        let root = env::temp_dir().join(format!(
+            "fluxmint-project-version-backup-{}",
+            Local::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let parent_root = root.join("parent");
+        let child_root = parent_root.join("child");
+        fs::create_dir_all(&child_root).unwrap();
+
+        let parent_project = ProjectRecord {
+            id: "parent-project".into(),
+            name: "Parent".into(),
+            discipline: "Product Design".into(),
+            status: "Active".into(),
+            root_path: parent_root.to_string_lossy().into_owned(),
+            last_opened_at: "2026-05-25 10:00".into(),
+            created_at: "2026-05-25 10:00".into(),
+        };
+        let child_project = ProjectRecord {
+            id: "child-project".into(),
+            name: "Child".into(),
+            discipline: "Product Design".into(),
+            status: "Active".into(),
+            root_path: child_root.to_string_lossy().into_owned(),
+            last_opened_at: "2026-05-25 10:00".into(),
+            created_at: "2026-05-25 10:00".into(),
+        };
+        let backup_dir = project_version_backup_dir_without_app(&child_project).unwrap();
+        fs::create_dir_all(&backup_dir).unwrap();
+        fs::write(backup_dir.join("snapshot.txt"), b"backup").unwrap();
+
+        assert_eq!(backup_dir.parent(), Some(parent_root.as_path()));
+        assert!(backup_dir
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("FluxMint_Project_Versions"));
+
+        let excluded_roots =
+            nested_project_roots(&parent_project, &[parent_project.clone(), child_project]).unwrap();
+        let canonical_backup_dir = backup_dir.canonicalize().unwrap();
+        assert!(excluded_roots.iter().any(|path| path == &canonical_backup_dir));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn file_versions_follow_asset_after_path_identity_changes() {
+        let previous_asset = AssetRecord {
+            id: asset_id("project-demo", "Source/sample.png"),
+            project_id: "project-demo".into(),
+            folder_id: None,
+            relative_folder_path: "Source".into(),
+            relative_path: "Source/sample.png".into(),
+            managed_path: "C:/project/Source/sample.png".into(),
+            name: "sample.png".into(),
+            format: "PNG".into(),
+            kind: "image".into(),
+            preview_mode: "image".into(),
+            tags: Vec::new(),
+            file_size_bytes: 3,
+            file_size_label: "3 B".into(),
+            original_path: "C:/project/Source/sample.png".into(),
+            received_at: "2026-05-25 10:00".into(),
+            imported_at: "2026-05-25 10:00".into(),
+            last_modified_at: "2026-05-25 10:00".into(),
+            fingerprint: "old".into(),
+        };
+        let mut moved_asset = previous_asset.clone();
+        moved_asset.id = asset_id("project-demo", "Target/sample.png");
+        moved_asset.relative_folder_path = "Target".into();
+        moved_asset.relative_path = "Target/sample.png".into();
+        moved_asset.managed_path = "C:/project/Target/sample.png".into();
+
+        let mut index = WorkspaceIndex {
+            version_entries: vec![FileVersionRecord {
+                id: "version-1".into(),
+                asset_id: previous_asset.id.clone(),
+                project_id: previous_asset.project_id.clone(),
+                name: previous_asset.name.clone(),
+                relative_path: previous_asset.relative_path.clone(),
+                original_path: previous_asset.managed_path.clone(),
+                snapshot_path: "C:/versions/version-1-sample.png".into(),
+                created_at: "2026-05-25 10:01".into(),
+                reason: "manual".into(),
+                note: String::new(),
+                file_size_bytes: 3,
+                file_size_label: "3 B".into(),
+                fingerprint: "old".into(),
+            }],
+            ..WorkspaceIndex::default()
+        };
+
+        reassign_file_versions(&mut index, &previous_asset.id, &moved_asset);
+
+        assert_eq!(index.version_entries[0].asset_id, moved_asset.id);
+        assert_eq!(index.version_entries[0].relative_path, "Target/sample.png");
+        assert_eq!(
+            index.version_entries[0].original_path,
+            "C:/project/Target/sample.png"
+        );
+    }
+
+    #[test]
     fn collect_native_drag_paths_rejects_empty_input() {
         let error = collect_native_drag_paths(&[]).unwrap_err();
 
@@ -4067,75 +5297,5 @@ mod tests {
         assert_eq!(resolved[0], file_path);
 
         let _ = fs::remove_dir_all(root);
-    }
-}
-
-fn unique_destination(target_dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
-    let original = Path::new(file_name);
-    let stem = original
-        .file_stem()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "asset".into());
-    let extension = original
-        .extension()
-        .map(|value| value.to_string_lossy().into_owned());
-
-    let mut candidate = target_dir.join(file_name);
-    let mut counter = 2;
-    while candidate.exists() {
-        let renamed = match &extension {
-            Some(extension) if !extension.is_empty() => format!("{stem}-{counter}.{extension}"),
-            _ => format!("{stem}-{counter}"),
-        };
-        candidate = target_dir.join(renamed);
-        counter += 1;
-    }
-    candidate
-}
-
-fn relative_to_root(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .map(|value| value.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_else(|_| path.to_string_lossy().replace('\\', "/"))
-}
-
-fn extension_lowercase(path: &Path) -> String {
-    path.extension()
-        .map(|value| value.to_string_lossy().to_lowercase())
-        .unwrap_or_else(|| "file".into())
-}
-
-fn modified_label(path: &Path) -> Result<String, String> {
-    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
-    let modified = metadata.modified().map_err(|error| error.to_string())?;
-    let datetime: chrono::DateTime<Local> = modified.into();
-    Ok(datetime.format("%Y-%m-%d %H:%M").to_string())
-}
-
-fn now_label() -> String {
-    Local::now().format("%Y-%m-%d %H:%M").to_string()
-}
-
-fn format_bytes(bytes: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    const GB: f64 = MB * 1024.0;
-
-    let bytes_f64 = bytes as f64;
-    if bytes_f64 >= GB {
-        format!("{:.1} GB", bytes_f64 / GB)
-    } else if bytes_f64 >= MB {
-        format!("{:.1} MB", bytes_f64 / MB)
-    } else if bytes_f64 >= KB {
-        format!("{:.1} KB", bytes_f64 / KB)
-    } else {
-        format!("{bytes} B")
-    }
-}
-
-fn same_path(left: &Path, right: &Path) -> bool {
-    match (left.canonicalize(), right.canonicalize()) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => left == right,
     }
 }

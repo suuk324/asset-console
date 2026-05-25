@@ -12,12 +12,14 @@ use lan_panel::{
 };
 use lan_panel_state::LanPanelState;
 use library::{
-    analyze_import, commit_import, create_folder, create_project, delete_assets, delete_folder,
-    delete_rule, empty_recycle_bin, load_operation_history, load_recycle_bin, load_workspace,
-    move_assets, open_external_target, open_managed_path, rename_asset, rename_folder,
-    rescan_project, resolve_native_preview, restore_recycle_entries, reveal_managed_path,
-    save_rule, save_settings, start_native_file_drag, unbind_project, undo_last_action,
-    undo_last_import, WorkspaceWatchState,
+    analyze_import, commit_import, create_file_version, create_folder, create_project,
+    create_project_version, delete_assets, delete_folder, delete_rule, empty_recycle_bin,
+    load_file_versions, load_operation_history, load_project_versions, load_recycle_bin,
+    load_workspace, move_assets, open_external_target, open_managed_path, rename_asset,
+    rename_folder, rescan_project, resolve_native_preview, restore_file_version,
+    restore_project_version, restore_recycle_entries, reveal_managed_path, save_rule,
+    save_settings, start_native_file_drag, unbind_project, undo_last_action, undo_last_import,
+    WorkspaceWatchState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -60,6 +62,12 @@ pub fn run() {
             reveal_managed_path,
             load_operation_history,
             load_recycle_bin,
+            load_file_versions,
+            create_file_version,
+            restore_file_version,
+            load_project_versions,
+            create_project_version,
+            restore_project_version,
             undo_last_action,
             undo_last_import,
             restore_recycle_entries,

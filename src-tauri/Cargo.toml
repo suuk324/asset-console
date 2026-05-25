@@ -1,6 +1,6 @@
 [package]
 name = "asset_console"
-version = "0.1.0"
+version = "1.1.0"
 description = "Local-first asset console for designers"
 authors = ["MOOM"]
 license = ""

@@ -226,7 +226,6 @@ export function AssetDetailDrawer({ collapsed, onToggle }: AssetDetailDrawerProp
       : 'Select a file in the center workspace to inspect its preview, paths, metadata, and quick actions.'
   const dragOutTitle = language === 'zh-CN' ? '拖到外部软件' : t(language, 'dragOutToExternal')
   const dragOutHint = language === 'zh-CN' ? '拖到 Rhino、Blender、Figma、KeyShot 或桌面' : t(language, 'dragOutHint')
-
   const metadataItems = useMemo(() => {
     if (!asset) {
       return []

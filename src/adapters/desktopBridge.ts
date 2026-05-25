@@ -7,11 +7,13 @@ import type {
   Asset,
   AppTheme,
   ClassificationRule,
+  FileVersion,
   ImportCandidate,
   ImportConflictStrategy,
   ImportWarning,
   ImportPreviewItem,
   Project,
+  ProjectVersion,
   ProjectFolder,
   RecycleBinEntry,
   SupportedLanguage,
@@ -217,6 +219,58 @@ export interface RecycleBinResponse {
   entries: RecycleEntryRecord[]
 }
 
+export interface FileVersionRecord {
+  id: string
+  assetId: string
+  projectId: string
+  name: string
+  relativePath: string
+  originalPath: string
+  snapshotPath: string
+  createdAt: string
+  reason: string
+  note: string
+  fileSizeBytes: number
+  fileSizeLabel: string
+  fingerprint: string
+}
+
+export interface ProjectVersionRecord {
+  id: string
+  projectId: string
+  projectName: string
+  rootPath: string
+  snapshotPath: string
+  createdAt: string
+  reason: string
+  note: string
+  fileCount: number
+  totalSizeBytes: number
+  totalSizeLabel: string
+}
+
+export interface FileVersionResponse {
+  versions: FileVersionRecord[]
+}
+
+export interface RestoreFileVersionResponse {
+  asset: AssetRecord
+  versions: FileVersionRecord[]
+}
+
+export interface ProjectVersionResponse {
+  backupPath: string
+  versions: ProjectVersionRecord[]
+}
+
+export interface RestoreProjectVersionResponse {
+  project: ProjectRecord
+  folders: FolderRecord[]
+  assets: AssetRecord[]
+  backupPath: string
+  versions: ProjectVersionRecord[]
+}
+
 export interface LanPanelDeviceRecord {
   id: string
   ip: string
@@ -241,6 +295,26 @@ export interface LanPanelStatusRecord {
 
 export interface RecycleBinMutationRequest {
   entryIds: string[]
+}
+
+export interface FileVersionRequest {
+  assetId: string
+  note?: string
+}
+
+export interface RestoreFileVersionRequest {
+  assetId: string
+  versionId: string
+}
+
+export interface ProjectVersionRequest {
+  projectId: string
+  note?: string
+}
+
+export interface RestoreProjectVersionRequest {
+  projectId: string
+  versionId: string
 }
 
 export interface NativeFileDragRequest {
@@ -351,6 +425,14 @@ export function toDomainRecycleEntry(record: RecycleEntryRecord): RecycleBinEntr
   return { ...record }
 }
 
+export function toDomainFileVersion(record: FileVersionRecord): FileVersion {
+  return { ...record }
+}
+
+export function toDomainProjectVersion(record: ProjectVersionRecord): ProjectVersion {
+  return { ...record }
+}
+
 export function toDomainLanPanelStatus(record: LanPanelStatusRecord): LanPanelStatus {
   return { ...record }
 }
@@ -456,6 +538,58 @@ export async function undoLastAction() {
 
 export async function loadRecycleBin() {
   return invoke<RecycleBinResponse>('load_recycle_bin')
+}
+
+export async function loadFileVersions(assetId: string) {
+  return invoke<FileVersionResponse>('load_file_versions', {
+    request: {
+      assetId,
+    } satisfies FileVersionRequest,
+  })
+}
+
+export async function createFileVersion(assetId: string, note = '') {
+  return invoke<FileVersionResponse>('create_file_version', {
+    request: {
+      assetId,
+      note,
+    } satisfies FileVersionRequest,
+  })
+}
+
+export async function restoreFileVersion(assetId: string, versionId: string) {
+  return invoke<RestoreFileVersionResponse>('restore_file_version', {
+    request: {
+      assetId,
+      versionId,
+    } satisfies RestoreFileVersionRequest,
+  })
+}
+
+export async function loadProjectVersions(projectId: string) {
+  return invoke<ProjectVersionResponse>('load_project_versions', {
+    request: {
+      projectId,
+    } satisfies ProjectVersionRequest,
+  })
+}
+
+export async function createProjectVersion(projectId: string, note = '') {
+  return invoke<ProjectVersionResponse>('create_project_version', {
+    request: {
+      projectId,
+      note,
+    } satisfies ProjectVersionRequest,
+  })
+}
+
+export async function restoreProjectVersion(projectId: string, versionId: string) {
+  return invoke<RestoreProjectVersionResponse>('restore_project_version', {
+    request: {
+      projectId,
+      versionId,
+    } satisfies RestoreProjectVersionRequest,
+  })
 }
 
 export async function restoreRecycleEntries(request: RecycleBinMutationRequest) {

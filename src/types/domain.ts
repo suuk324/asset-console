@@ -45,6 +45,10 @@ export type UserActionType =
   | 'toggle_favorite'
   | 'restore_recycle'
   | 'empty_recycle'
+  | 'create_version'
+  | 'restore_version'
+  | 'create_project_version'
+  | 'restore_project_version'
 
 export type ImportWarningKind = 'exact_duplicate' | 'same_name_conflict' | 'similar_name'
 
@@ -206,6 +210,36 @@ export interface RecycleBinEntry {
   recyclePath: string
   deletedAt: string
   sizeLabel: string
+}
+
+export interface FileVersion {
+  id: string
+  assetId: string
+  projectId: string
+  name: string
+  relativePath: string
+  originalPath: string
+  snapshotPath: string
+  createdAt: string
+  reason: string
+  note: string
+  fileSizeBytes: number
+  fileSizeLabel: string
+  fingerprint: string
+}
+
+export interface ProjectVersion {
+  id: string
+  projectId: string
+  projectName: string
+  rootPath: string
+  snapshotPath: string
+  createdAt: string
+  reason: string
+  note: string
+  fileCount: number
+  totalSizeBytes: number
+  totalSizeLabel: string
 }
 
 export interface UndoImportRecord {
