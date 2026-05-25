@@ -6,7 +6,7 @@ FluxMint 设计资产台是一款面向设计资源管理的桌面软件，基�
 
 Windows 安装包已发布到 GitHub Release。
 
-- Release 页面: [FluxMint Design Asset Console 1.1.0](https://github.com/suuk324/asset-console/releases/tag/1.1.0)
+- Release 页面: [FluxMint Design Asset Console 1.1.0](https://github.com/suuk324/asset-console/releases/tag/v1.1.0)
 - 安装包文件: `FluxMint-Design-Asset-Console-v0.1.0-x64-setup.exe`
 
 安装步骤:
